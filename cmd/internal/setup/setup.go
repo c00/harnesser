@@ -38,14 +38,6 @@ func Setup(cmd *cobra.Command) (*runner.Runner, error) {
 
 	// Create runner
 	historyFile, _ := cmd.Flags().GetString("thread")
-	// Here we need a file, otherwise this command makes no sense. So if historyFile is empty, we will choose the latest file in the history folder
-	if historyFile == "" {
-		var err error
-		historyFile, err = chooseLatest(historyDir)
-		if err != nil {
-			return nil, fmt.Errorf("cannot find latest file: %w", err)
-		}
-	}
 
 	if cont, _ := cmd.Flags().GetBool("continue"); cont {
 		// set history file to the last file
