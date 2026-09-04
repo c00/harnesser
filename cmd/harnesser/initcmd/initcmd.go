@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/c00/harnesser/config"
+	"github.com/c00/harnesser/secrets"
 	"github.com/spf13/cobra"
 )
 
@@ -35,11 +36,17 @@ func run(cmd *cobra.Command, args []string) error {
 		}
 		targetConfigFile = filepath.Join(home, targetConfigFile)
 		path = filepath.Join(home, path)
+
+		err = secrets.ApiKeySetup()
+		if err != nil {
+			return fmt.Errorf("cannot setup api key: %w", err)
+		}
 	}
 
 	_, err := os.Stat(targetConfigFile)
 	if err == nil || !os.IsNotExist(err) {
-		return fmt.Errorf("harnesser already initialized")
+		fmt.Println("harnesser already initialized")
+		return nil
 	}
 
 	err = config.Write(config.Defaults(), forUser)

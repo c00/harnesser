@@ -13,6 +13,7 @@ import (
 	"github.com/c00/harnesser/cmd/harnesser/startcmd"
 	"github.com/c00/harnesser/cmd/harnesser/stepcmd"
 	"github.com/c00/harnesser/cmd/harnesser/toolcmd"
+	"github.com/c00/harnesser/version"
 	"github.com/spf13/cobra"
 )
 
@@ -21,6 +22,7 @@ var rootCmd = &cobra.Command{
 	Short:         "Simple AI Harness cli",
 	SilenceUsage:  true,
 	SilenceErrors: true,
+	Version:       version.Version,
 }
 
 func main() {

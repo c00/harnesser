@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/c00/harnesser/cmd/internal/inputscan"
+	"github.com/c00/harnesser/internal/inputscan"
 )
 
 // This package is just a random test thing. None of this is important. It is where we throw in some test code

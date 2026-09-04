@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/c00/harnesser/cmd/internal/inputscan"
 	"github.com/c00/harnesser/cmd/internal/setup"
+	"github.com/c00/harnesser/internal/inputscan"
 	"github.com/c00/harnesser/models"
 	"github.com/c00/harnesser/runner"
 	"github.com/spf13/cobra"
