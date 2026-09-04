@@ -4,6 +4,8 @@ Dead simple AI harnesses. Tools, multiple providers, agents, multi-turn conversa
 
 Create a new harness for every project.
 
+VERY MUCH IN ALPHA
+
 ## Add Tools
 
 By simply adding yaml files
