@@ -10,6 +10,7 @@ import (
 	"github.com/c00/harnesser/config"
 	"github.com/c00/harnesser/llm/openrouter"
 	"github.com/c00/harnesser/runner"
+	"github.com/c00/harnesser/secrets"
 	"github.com/spf13/cobra"
 )
 
@@ -27,10 +28,9 @@ func Setup(cmd *cobra.Command) (*runner.Runner, error) {
 	historyDir := filepath.Join(cfg.DataDir, "history")
 
 	// Initialize components
-	// TODO some secrets management solution
-	apiKey := os.Getenv("OPENROUTER_API_KEY")
-	if apiKey == "" {
-		return nil, errors.New("no openrouter api key set")
+	apiKey, err := secrets.GetSecret(secrets.OpenrouterKeyName)
+	if err != nil {
+		return nil, fmt.Errorf("cannot get openrouter key: %w", err)
 	}
 
 	// TODO abstract this away to support multiple llm backends
