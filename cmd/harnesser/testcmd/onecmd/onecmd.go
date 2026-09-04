@@ -16,7 +16,7 @@ import (
 
 var Cmd = &cobra.Command{
 	Use:           "one",
-	Short:         "single-turn inference",
+	Short:         "Run a single-turn inference",
 	SilenceUsage:  true,
 	SilenceErrors: true,
 	RunE:          run,

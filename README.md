@@ -65,9 +65,7 @@ command:
 
 ## TODO 
 
-- Fix sigint when reading stdin
 - Add tools like read files, edit file, list directory, run command
-  - Restructure the subcommands to make this better
   - Start with reading tools
 - Create bubbletea textarea input
 - Add support for `allowedSecrets` and `{{ .Secrets.FOO }}` in interpolation.

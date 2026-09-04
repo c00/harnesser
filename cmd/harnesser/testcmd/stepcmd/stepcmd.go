@@ -15,7 +15,7 @@ import (
 
 var Cmd = &cobra.Command{
 	Use:           "step",
-	Short:         "run a single step of the agent process, such as tool calling, or tool result inference",
+	Short:         "Run a single step of the agent process, such as tool calling, or tool result inference",
 	SilenceUsage:  true,
 	SilenceErrors: true,
 	RunE:          run,

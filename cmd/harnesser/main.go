@@ -9,11 +9,9 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/c00/harnesser/cmd/harnesser/decidecmd"
 	"github.com/c00/harnesser/cmd/harnesser/initcmd"
-	"github.com/c00/harnesser/cmd/harnesser/onecmd"
 	"github.com/c00/harnesser/cmd/harnesser/startcmd"
-	"github.com/c00/harnesser/cmd/harnesser/stepcmd"
+	"github.com/c00/harnesser/cmd/harnesser/testcmd"
 	"github.com/c00/harnesser/cmd/harnesser/toolcmd"
 	"github.com/c00/harnesser/version"
 	"github.com/spf13/cobra"
@@ -30,11 +28,9 @@ var rootCmd = &cobra.Command{
 func main() {
 	// Add subcommands
 	rootCmd.AddCommand(
-		onecmd.Cmd,
-		stepcmd.Cmd,
 		initcmd.Cmd,
-		decidecmd.Cmd,
 		startcmd.Cmd,
+		testcmd.Cmd,
 		toolcmd.Cmd,
 	)
 

@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -424,14 +426,26 @@ func (r *Runner) runTool(ctx context.Context, tc models.ToolCall) (models.Messag
 		return models.Message{}, fmt.Errorf("cannot interpolate command for tool '%v': %w", td.Tool.Name, err)
 	}
 	args := cmdSlice[1:]
-	// Run the command
-	// TODO limit the env vars to allowedEnvs
+	// Remove empties
+	args = slices.DeleteFunc(args, func(s string) bool {
+		return s == ""
+	})
+	// Build the command with only the environment variables tools are allowed to inherit.
+	// TODO limit env vars
 	cmd := exec.CommandContext(execCtx, cmdSlice[0], args...)
+
+	slog.Debug("Executing command", "command", fmt.Sprintf("%v %v", cmdSlice[0], strings.Join(args, " ")))
+
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
 
 	data, err := cmd.Output()
 	if err != nil {
 		// If the process finishes with a non-zero exit code, return an error
-		fmt.Println("command failed", strings.Join(cmdSlice, " "))
+		stderrText := strings.TrimSpace(stderr.String())
+		if stderrText != "" {
+			return models.Message{}, fmt.Errorf("running tool '%v' failed: %w: %s", td.Tool.Name, err, stderrText)
+		}
 
 		return models.Message{}, fmt.Errorf("running tool '%v' failed: %w", td.Tool.Name, err)
 	}
