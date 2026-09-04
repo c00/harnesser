@@ -1,6 +1,7 @@
 package secrets
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -38,7 +39,7 @@ func GetSecret(name string) (string, error) {
 	return val, nil
 }
 
-func ApiKeySetup() error {
+func ApiKeySetup(ctx context.Context) error {
 	apiKeyFromKeyringExists := HasSecret(OpenrouterKeyName)
 	apiKeyFromEnv := os.Getenv("OPENROUTER_API_KEY")
 
@@ -46,7 +47,7 @@ func ApiKeySetup() error {
 
 	if apiKeyFromKeyringExists {
 		fmt.Println("API key is already set in keyring.")
-		doUpdate := inputscan.GetYesNo("Do you want to update it?", true)
+		doUpdate := inputscan.GetYesNo(ctx, "Do you want to update it?", true)
 		if !doUpdate {
 			return nil
 		}
@@ -54,7 +55,7 @@ func ApiKeySetup() error {
 	} else if apiKeyFromEnv != "" {
 		keySnippet := apiKeyFromEnv[:5] + "***" + apiKeyFromEnv[len(apiKeyFromEnv)-4:]
 		fmt.Printf("We found an API key in the env: %v. \n", keySnippet)
-		use := inputscan.GetYesNo("Would you like to use this?", true)
+		use := inputscan.GetYesNo(ctx, "Would you like to use this?", true)
 		if use {
 			err := SetSecret(OpenrouterKeyName, apiKeyFromEnv)
 			if err != nil {
@@ -64,7 +65,7 @@ func ApiKeySetup() error {
 		}
 	}
 
-	val := inputscan.GetInput("Openrouter API key: ")
+	val := inputscan.GetInput(ctx, "Openrouter API key: ")
 	if val == "" {
 		return fmt.Errorf("API key cannot be empty")
 	}

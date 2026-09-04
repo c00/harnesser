@@ -36,7 +36,7 @@ func run(cmd *cobra.Command, args []string) error {
 
 	initialPrompt := strings.Join(args, " ")
 	if initialPrompt == "" {
-		initialPrompt = inputscan.GetInput("You: ")
+		initialPrompt = inputscan.GetInput(ctx, "You: ")
 	}
 
 	agent.AddMessage(models.NewUserTextMessage(initialPrompt))
@@ -50,7 +50,7 @@ func run(cmd *cobra.Command, args []string) error {
 
 		switch resp.Type {
 		case runner.ResponseTypeNew:
-			ok := askForInput(agent)
+			ok := askForInput(ctx, agent)
 			if !ok {
 				return nil
 			}
@@ -59,7 +59,7 @@ func run(cmd *cobra.Command, args []string) error {
 			return nil
 		case runner.ResponseTypeInferenceResultNoTools:
 			printMessage(resp)
-			askForInput(agent)
+			askForInput(ctx, agent)
 		case runner.ResponseTypeInferenceResultWithTools:
 			printMessage(resp)
 		case runner.ResponseTypeToolResults:
@@ -74,8 +74,8 @@ func run(cmd *cobra.Command, args []string) error {
 	}
 }
 
-func askForInput(agent *runner.Runner) bool {
-	prompt := inputscan.GetInput("You: ")
+func askForInput(ctx context.Context, agent *runner.Runner) bool {
+	prompt := inputscan.GetInput(ctx, "You: ")
 	if prompt == "" {
 		return false
 	}
@@ -88,7 +88,7 @@ func askPermission(ctx context.Context, agent *runner.Runner, resp runner.Respon
 	// Ask the user for permission to run tools
 	for _, tc := range resp.ToApprove {
 		fmt.Printf("\nNeed approval for: %v\nArguments: \n%v\n", tc.Function, tc.PrettyArgs())
-		approved := inputscan.GetYesNo("Approve this tool call?", false)
+		approved := inputscan.GetYesNo(ctx, "Approve this tool call?", false)
 
 		if approved {
 			err := agent.ConfirmToolCall(ctx, tc.ToolCallID, models.ToolCallDecisionApprove)

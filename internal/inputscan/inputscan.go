@@ -2,22 +2,32 @@ package inputscan
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"strings"
 )
 
-func GetInput(prompt string) string {
+func GetInput(ctx context.Context, prompt string) string {
 	fmt.Print(prompt)
 
-	scanner := bufio.NewScanner(os.Stdin)
-	scanner.Scan()
-	input := scanner.Text()
+	inputCh := make(chan string)
 
-	return input
+	go func() {
+		scanner := bufio.NewScanner(os.Stdin)
+		scanner.Scan()
+		inputCh <- scanner.Text()
+	}()
+
+	select {
+	case input := <-inputCh:
+		return input
+	case <-ctx.Done():
+		return ""
+	}
 }
 
-func GetYesNo(prompt string, defaultOption bool) bool {
+func GetYesNo(ctx context.Context, prompt string, defaultOption bool) bool {
 	yesChar := "yes"
 	noChar := "No"
 
@@ -28,7 +38,7 @@ func GetYesNo(prompt string, defaultOption bool) bool {
 
 	for {
 		prompt := fmt.Sprintf("%v [%v/%v]", prompt, yesChar, noChar)
-		input := strings.ToLower(GetInput(prompt))
+		input := strings.ToLower(GetInput(ctx, prompt))
 		if input == "" {
 			return defaultOption
 		}

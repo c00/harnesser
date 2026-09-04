@@ -37,7 +37,7 @@ func run(cmd *cobra.Command, args []string) error {
 		targetConfigFile = filepath.Join(home, targetConfigFile)
 		path = filepath.Join(home, path)
 
-		err = secrets.ApiKeySetup()
+		err = secrets.ApiKeySetup(cmd.Context())
 		if err != nil {
 			return fmt.Errorf("cannot setup api key: %w", err)
 		}

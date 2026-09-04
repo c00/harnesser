@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/c00/harnesser/cmd/harnesser/decidecmd"
@@ -35,6 +37,24 @@ func main() {
 		startcmd.Cmd,
 		toolcmd.Cmd,
 	)
+
+	logLevel := slog.LevelDebug
+	logLevelStr := strings.ToLower(os.Getenv("HARNESSER_LOG_LEVEL"))
+
+	switch logLevelStr {
+	case "debug":
+		logLevel = slog.LevelDebug
+	case "info":
+		logLevel = slog.LevelInfo
+	case "warn":
+		logLevel = slog.LevelWarn
+	case "error":
+		logLevel = slog.LevelError
+	}
+
+	baseHandler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: logLevel})
+	slog.SetDefault(slog.New(baseHandler))
+	slog.SetLogLoggerLevel(logLevel)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
