@@ -33,7 +33,7 @@ func TestReadFile(t *testing.T) {
 			filename := filepath.Join(t.TempDir(), "input.txt")
 			require.NoError(t, os.WriteFile(filename, []byte(tt.contents), 0o600))
 
-			got, err := readFile(filename, tt.startLine, tt.maxLines, tt.maxBytes, tt.includeLineNr)
+			got, err := readFile(t.Context(), filename, tt.startLine, tt.maxLines, tt.maxBytes, tt.includeLineNr)
 
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, string(got))
@@ -65,7 +65,7 @@ func TestReadFileErrors(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := readFile(tt.filename, tt.startLine, tt.maxLines, tt.maxBytes, false)
+			_, err := readFile(t.Context(), tt.filename, tt.startLine, tt.maxLines, tt.maxBytes, false)
 			assert.Error(t, err)
 		})
 	}

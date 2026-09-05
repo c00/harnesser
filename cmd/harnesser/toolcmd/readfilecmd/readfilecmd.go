@@ -2,10 +2,12 @@ package readfilecmd
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"strconv"
 
+	"github.com/c00/harnesser/redact"
 	"github.com/spf13/cobra"
 )
 
@@ -34,7 +36,7 @@ func run(cmd *cobra.Command, args []string) error {
 
 	filename := args[0]
 
-	data, err := readFile(filename, startLine, maxLines, maxBytes, includeNrs)
+	data, err := readFile(cmd.Context(), filename, startLine, maxLines, maxBytes, includeNrs)
 	if err != nil {
 		return fmt.Errorf("cannot read file '%v': %w", filename, err)
 	}
@@ -44,7 +46,7 @@ func run(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func readFile(filename string, startLine, maxLines, maxBytes int, includeLineNr bool) ([]byte, error) {
+func readFile(ctx context.Context, filename string, startLine, maxLines, maxBytes int, includeLineNr bool) ([]byte, error) {
 	if startLine < 1 {
 		return nil, fmt.Errorf("start line must be at least 1")
 	}
@@ -85,7 +87,11 @@ func readFile(filename string, startLine, maxLines, maxBytes int, includeLineNr 
 	}
 
 	if output.Len() <= maxBytes {
-		return output.Bytes(), nil
+		redacted, err := redact.RedactBytes(ctx, output.Bytes())
+		if err != nil {
+			return nil, fmt.Errorf("cannot redact: %w", err)
+		}
+		return redacted, nil
 	}
 
 	result := append([]byte(nil), output.Bytes()[:maxBytes]...)
@@ -93,7 +99,12 @@ func readFile(filename string, startLine, maxLines, maxBytes int, includeLineNr 
 		result = append(result, '\n')
 	}
 	result = append(result, "[output truncated: maximum byte count reached]\n"...)
-	return result, nil
+
+	redacted, err := redact.RedactBytes(ctx, result)
+	if err != nil {
+		return nil, fmt.Errorf("cannot redact: %w", err)
+	}
+	return redacted, nil
 }
 
 // splitLines returns physical file lines and retains their line endings.
