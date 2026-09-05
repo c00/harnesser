@@ -67,6 +67,7 @@ command:
 
 - Add tools like read files, edit file, list directory, run command
   - Start with reading tools
+  - Redact secrets from read files
 - Create bubbletea textarea input
 - Add support for `allowedSecrets` and `{{ .Secrets.FOO }}` in interpolation.
 - Make 'start' the default if no args are given
