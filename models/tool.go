@@ -22,6 +22,8 @@ type ToolDefinition struct {
 	Tool    Tool `yaml:"tool"`
 	// Command specifies the command and arguments
 	Command []string `yaml:"command"`
+	// ArgsFrom specified the parameter where the args are set. Should point to a string array
+	ArgsFrom string `yaml:"argsFrom"`
 	// AllowedEnv are the environment variables that will be forwarded to the command
 	AllowedEnv []string `yaml:"allowedEnv"`
 }

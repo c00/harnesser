@@ -67,10 +67,12 @@ command:
 
 - Add tools like read files, edit file, list directory, run command
   - Start with reading tools
-  - Redact secrets from read files
 - Create bubbletea textarea input
 - Add support for `allowedSecrets` and `{{ .Secrets.FOO }}` in interpolation.
 - Make 'start' the default if no args are given
+
+- Consider redacting ignored files on ls results. 
+  - May be add a "filter" array to tooldefs, with things like 'ignoredFiles', 'secrets', that just does post command filtering on the output.
 
 ### Longer term
 

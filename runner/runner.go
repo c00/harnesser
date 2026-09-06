@@ -421,11 +421,18 @@ func (r *Runner) runTool(ctx context.Context, tc models.ToolCall) (models.Messag
 	execCtx, cancel := context.WithTimeout(ctx, time.Second*5)
 	defer cancel()
 
-	cmdSlice, err := interpolator.InterpolatedCommand(tc, td)
+	cmdSlice, tcParamData, err := interpolator.InterpolatedCommand(tc, td)
 	if err != nil {
 		return models.Message{}, fmt.Errorf("cannot interpolate command for tool '%v': %w", td.Tool.Name, err)
 	}
 	args := cmdSlice[1:]
+
+	// Extra args
+	if td.ArgsFrom != "" {
+		extraArgs := getStringSlice(tcParamData.Params, td.ArgsFrom)
+		args = append(args, extraArgs...)
+	}
+
 	// Remove empties
 	args = slices.DeleteFunc(args, func(s string) bool {
 		return s == ""
@@ -464,4 +471,28 @@ func (r *Runner) Messages() models.Messages {
 	copy(messagesCopy, r.messages)
 
 	return messagesCopy
+}
+
+func getStringSlice(params map[string]any, key string) []string {
+	extraArgs, ok := params[key]
+	if !ok {
+		return []string{}
+	}
+	// if extra args is of type []string, return that
+	if paramSlice, ok := extraArgs.([]string); ok {
+		return paramSlice
+	}
+
+	// if extra args is of type []any, then iterate through that, and add every string in it to a slice and return that slice.
+	if anySlice, ok := extraArgs.([]any); ok {
+		result := []string{}
+		for _, item := range anySlice {
+			if s, ok := item.(string); ok {
+				result = append(result, s)
+			}
+		}
+		return result
+	}
+
+	return []string{}
 }

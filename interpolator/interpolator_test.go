@@ -148,7 +148,7 @@ func TestInterpolatedCommand(t *testing.T) {
 				t.Setenv(k, v)
 			}
 
-			got, err := InterpolatedCommand(tt.tc, tt.td)
+			got, _, err := InterpolatedCommand(tt.tc, tt.td)
 
 			if tt.wantErr {
 				require.Error(t, err)

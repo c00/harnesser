@@ -17,7 +17,7 @@ type ToolCallData struct {
 	// Potentially add more context if needed.
 }
 
-func InterpolatedCommand(tc models.ToolCall, td models.ToolDefinition) ([]string, error) {
+func InterpolatedCommand(tc models.ToolCall, td models.ToolDefinition) ([]string, ToolCallData, error) {
 	interpolatedArgs := []string{}
 
 	// Build params
@@ -29,13 +29,13 @@ func InterpolatedCommand(tc models.ToolCall, td models.ToolDefinition) ([]string
 
 	data.Params, err = getArgsAsParams(tc.Args, td.Tool.Parameters)
 	if err != nil {
-		return nil, fmt.Errorf("cannot get toolcall args as parameters: %w", err)
+		return nil, data, fmt.Errorf("cannot get toolcall args as parameters: %w", err)
 	}
 
 	for _, key := range td.AllowedEnv {
 		val := os.Getenv(key)
 		if val == "" {
-			return nil, fmt.Errorf("missing env variable: %v", key)
+			return nil, data, fmt.Errorf("missing env variable: %v", key)
 		}
 		data.Env[key] = val
 	}
@@ -53,19 +53,19 @@ func InterpolatedCommand(tc models.ToolCall, td models.ToolDefinition) ([]string
 			Parse(part)
 
 		if err != nil {
-			return nil, fmt.Errorf("cannot parse template for part %v: %w", part, err)
+			return nil, data, fmt.Errorf("cannot parse template for part %v: %w", part, err)
 		}
 
 		var interpolated bytes.Buffer
 		if err := tmpl.Execute(&interpolated, data); err != nil {
-			return nil, fmt.Errorf("cannot execute template for part %v: %w", part, err)
+			return nil, data, fmt.Errorf("cannot execute template for part %v: %w", part, err)
 		}
 
 		interpolatedArgs = append(interpolatedArgs, interpolated.String())
 
 	}
 
-	return interpolatedArgs, nil
+	return interpolatedArgs, data, nil
 }
 
 func getArgsAsParams(data string, schema map[string]any) (map[string]any, error) {
