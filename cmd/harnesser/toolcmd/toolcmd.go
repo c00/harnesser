@@ -2,6 +2,7 @@ package toolcmd
 
 import (
 	"github.com/c00/harnesser/cmd/harnesser/toolcmd/readfilecmd"
+	"github.com/c00/harnesser/cmd/harnesser/toolcmd/replacetextcmd"
 	"github.com/c00/harnesser/cmd/harnesser/toolcmd/writefilecmd"
 	"github.com/spf13/cobra"
 )
@@ -16,6 +17,7 @@ var Cmd = &cobra.Command{
 func init() {
 	Cmd.AddCommand(
 		readfilecmd.Cmd,
+		replacetextcmd.Cmd,
 		writefilecmd.Cmd,
 	)
 }
