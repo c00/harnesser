@@ -24,7 +24,7 @@ var Cmd = &cobra.Command{
 func init() {
 	Cmd.Flags().IntP("start", "s", 1, "Starting line. The first line is 1.")
 	Cmd.Flags().IntP("max-lines", "l", 100, "The maximum number of lines to include.")
-	Cmd.Flags().IntP("max-bytes", "b", 1024, "The maximum number of bytes to include.")
+	Cmd.Flags().IntP("max-bytes", "b", 4096, "The maximum number of bytes to include.")
 	Cmd.Flags().Bool("line-numbers", false, "Set to true to include line numbers in the output.")
 }
 
