@@ -382,7 +382,8 @@ func (r *Runner) RunTools(ctx context.Context) (models.Messages, error) {
 	for _, tc := range lastMessage.ToolCalls {
 		msg, err := r.runTool(ctx, tc)
 		if err != nil {
-			return nil, fmt.Errorf("cannot run tool call '%v': %w", tc.Function, err)
+			slog.Debug("Cannot run toolcall", "id", tc.ToolCallID, "name", tc.Function, "error", err.Error())
+			msg = models.NewToolErrorMessage(tc.ToolCallID, fmt.Sprintf("cannot run tool call '%v': %v", tc.Function, err.Error()))
 		}
 		messages = append(messages, msg)
 	}

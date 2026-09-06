@@ -19,7 +19,19 @@ const (
 
 type Config struct {
 	DataDir   string           `yaml:"-"`
+	Landlock  LandlockSettings `yaml:"landlock"`
 	LlmConfig models.LlmConfig `yaml:"llmConfig"`
+}
+
+type LandlockSettings struct {
+	// Landlock the application to the current working dir and main configuration
+	Active bool `yaml:"active"`
+	// Include folders in PATH as read only (for executing tools)
+	IncludePath bool `yaml:"includePath"`
+	// Extra directories to grant readonly access
+	ExtraRODirs []string `yaml:"extraRODirs"`
+	// Extra directories to grant write access
+	ExtraRWDirs []string `yaml:"extraRWDirs"`
 }
 
 // Load confg from disk or return defaults
@@ -94,6 +106,10 @@ func Write(cfg Config, userHome bool) error {
 
 func Defaults() Config {
 	return Config{
+		Landlock: LandlockSettings{
+			Active:      true,
+			IncludePath: true,
+		},
 		LlmConfig: models.LlmConfig{
 			Name:     "openrouter",
 			Provider: "openrouter",

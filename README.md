@@ -66,10 +66,11 @@ command:
 ## TODO 
 
 - Add tools like read files, edit file, list directory, run command
-  - Start with reading tools
+  - Add replace, write, commands.
 - Create bubbletea textarea input
 - Add support for `allowedSecrets` and `{{ .Secrets.FOO }}` in interpolation.
 - Make 'start' the default if no args are given
+- Make prompts dynamic so we can add the WD in there.
 
 - Consider redacting ignored files on ls results. 
   - May be add a "filter" array to tooldefs, with things like 'ignoredFiles', 'secrets', that just does post command filtering on the output.
@@ -77,4 +78,3 @@ command:
 ### Longer term
 
 - We probably want to add a jsonrpc output for it too.
-- Add LSM to limit the damage this thing can do to your system.

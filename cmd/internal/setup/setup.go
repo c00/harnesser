@@ -4,10 +4,12 @@ package setup
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 
 	"github.com/c00/harnesser/config"
+	"github.com/c00/harnesser/landlock"
 	"github.com/c00/harnesser/llm/openrouter"
 	"github.com/c00/harnesser/runner"
 	"github.com/c00/harnesser/secrets"
@@ -57,6 +59,38 @@ func Setup(cmd *cobra.Command) (*runner.Runner, error) {
 	err = agent.LoadHistory()
 	if err != nil {
 		return nil, fmt.Errorf("cannot load history: %w", err)
+	}
+
+	// landlock
+	if cfg.Landlock.Active {
+		slog.Debug("Activating LSM Landlock")
+
+		roDirs := []string{}
+		roDirs = append(roDirs, cfg.Landlock.ExtraRODirs...)
+		roDirs = append(roDirs, landlock.PathToDirs()...)
+		roDirs = append(roDirs, landlock.RequiredRODirs()...)
+
+		// User config
+		home, _ := os.UserHomeDir()
+		if home != "" {
+			roDirs = append(roDirs, filepath.Join(home, config.DirName))
+		}
+
+		rwDirs := []string{}
+		rwDirs = append(rwDirs, cfg.Landlock.ExtraRWDirs...)
+
+		// Current working directory
+		wd, _ := os.Getwd()
+		// I don't want the whole home folder to be accessible. Seems like it could cause issues.
+		// A lot of secrets may be there, also writing could destroy a lot of things.
+		if wd != "" && wd != home {
+			rwDirs = append(rwDirs, wd)
+		}
+
+		err := landlock.Landlock(roDirs, rwDirs)
+		if err != nil {
+			return nil, fmt.Errorf("cannot landlock: %w", err)
+		}
 	}
 
 	return agent, nil
