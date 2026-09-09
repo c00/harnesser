@@ -70,21 +70,28 @@ func Setup(cmd *cobra.Command) (*runner.Runner, error) {
 		roDirs = append(roDirs, landlock.PathToDirs()...)
 		roDirs = append(roDirs, landlock.RequiredRODirs()...)
 
-		// User config
-		home, _ := os.UserHomeDir()
-		if home != "" {
-			roDirs = append(roDirs, filepath.Join(home, config.DirName))
-		}
-
 		rwDirs := []string{}
 		rwDirs = append(rwDirs, cfg.Landlock.ExtraRWDirs...)
 
 		// Current working directory
 		wd, _ := os.Getwd()
+		home, _ := os.UserHomeDir()
 		// I don't want the whole home folder to be accessible. Seems like it could cause issues.
 		// A lot of secrets may be there, also writing could destroy a lot of things.
 		if wd != "" && wd != home {
 			rwDirs = append(rwDirs, wd)
+		}
+
+		// User config dir
+		if home != "" {
+			homeConfig := filepath.Join(home, config.DirName)
+			if wd == home {
+				// Add writable config dir
+				rwDirs = append(rwDirs, homeConfig)
+			} else {
+				// Add readable config dir
+				roDirs = append(roDirs, homeConfig)
+			}
 		}
 
 		err := landlock.Landlock(roDirs, rwDirs)
