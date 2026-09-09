@@ -8,13 +8,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"slices"
 	"strings"
 	"time"
 
-	"github.com/c00/harnesser/interpolator"
 	"github.com/c00/harnesser/llm"
 	"github.com/c00/harnesser/models"
+	"github.com/c00/harnesser/tools"
 	"go.yaml.in/yaml/v4"
 )
 
@@ -38,7 +37,12 @@ type UpdateResponse struct {
 type Response struct {
 	Type      RunnerResponseType
 	Messages  models.Messages
-	ToApprove []models.ToolCall
+	ToApprove []PendingToolcall
+}
+
+type PendingToolcall struct {
+	ToolCall       models.ToolCall
+	ToolDefinition models.ToolDefinition
 }
 
 type Runner struct {
@@ -330,16 +334,16 @@ func (r *Runner) RunStep(ctx context.Context) (Response, error) {
 		// Not the most efficient but fine for now.
 		// If any are actively rejected, the RunTools will gracefully deal with it.
 
-		notApprovedYet := []models.ToolCall{}
+		notApprovedYet := []PendingToolcall{}
 
 		for _, tc := range lastMsg.ToolCalls {
 			td, ok := r.toolDefs[tc.Function]
 			if !ok {
-				return Response{}, fmt.Errorf("tool not defined: %v", tc.Function)
+				continue
 			}
 
 			if !td.Trusted && (tc.Decision == models.ToolCallDecisionNoDecision || tc.Decision == "") {
-				notApprovedYet = append(notApprovedYet, tc)
+				notApprovedYet = append(notApprovedYet, PendingToolcall{ToolCall: tc, ToolDefinition: td})
 			}
 		}
 
@@ -422,27 +426,15 @@ func (r *Runner) runTool(ctx context.Context, tc models.ToolCall) (models.Messag
 	execCtx, cancel := context.WithTimeout(ctx, time.Second*5)
 	defer cancel()
 
-	cmdSlice, tcParamData, err := interpolator.InterpolatedCommand(tc, td)
+	builder, err := tools.NewToolCallBuilder(tc, td)
 	if err != nil {
-		return models.Message{}, fmt.Errorf("cannot interpolate command for tool '%v': %w", td.Tool.Name, err)
-	}
-	args := cmdSlice[1:]
-
-	// Extra args
-	if td.ArgsFrom != "" {
-		extraArgs := getStringSlice(tcParamData.Params, td.ArgsFrom)
-		args = append(args, extraArgs...)
+		return models.Message{}, fmt.Errorf("cannot create tool call builder: %w", err)
 	}
 
-	// Remove empties
-	args = slices.DeleteFunc(args, func(s string) bool {
-		return s == ""
-	})
-	// Build the command with only the environment variables tools are allowed to inherit.
 	// TODO limit env vars
-	cmd := exec.CommandContext(execCtx, cmdSlice[0], args...)
+	cmd := exec.CommandContext(execCtx, builder.CommandName(), builder.CommandArgs()...)
 
-	slog.Debug("Executing command", "command", fmt.Sprintf("%v %v", cmdSlice[0], strings.Join(args, " ")))
+	slog.Debug("Executing command", "command", fmt.Sprintf("%v", builder.CommandString()))
 
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
@@ -472,28 +464,4 @@ func (r *Runner) Messages() models.Messages {
 	copy(messagesCopy, r.messages)
 
 	return messagesCopy
-}
-
-func getStringSlice(params map[string]any, key string) []string {
-	extraArgs, ok := params[key]
-	if !ok {
-		return []string{}
-	}
-	// if extra args is of type []string, return that
-	if paramSlice, ok := extraArgs.([]string); ok {
-		return paramSlice
-	}
-
-	// if extra args is of type []any, then iterate through that, and add every string in it to a slice and return that slice.
-	if anySlice, ok := extraArgs.([]any); ok {
-		result := []string{}
-		for _, item := range anySlice {
-			if s, ok := item.(string); ok {
-				result = append(result, s)
-			}
-		}
-		return result
-	}
-
-	return []string{}
 }

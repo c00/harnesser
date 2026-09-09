@@ -9,6 +9,7 @@ import (
 	"github.com/c00/harnesser/internal/inputscan"
 	"github.com/c00/harnesser/models"
 	"github.com/c00/harnesser/runner"
+	"github.com/c00/harnesser/tools"
 	"github.com/spf13/cobra"
 )
 
@@ -86,8 +87,16 @@ func askForInput(ctx context.Context, agent *runner.Runner) bool {
 
 func askPermission(ctx context.Context, agent *runner.Runner, resp runner.Response) error {
 	// Ask the user for permission to run tools
-	for _, tc := range resp.ToApprove {
-		fmt.Printf("\nNeed approval for: %v\nArguments: \n%v\n", tc.Function, tc.PrettyArgs())
+	for _, pending := range resp.ToApprove {
+		tc := pending.ToolCall
+		td := pending.ToolDefinition
+
+		builder, err := tools.NewToolCallBuilder(tc, td)
+		if err != nil {
+			return fmt.Errorf("cannot create tool call builder: %w", err)
+		}
+
+		fmt.Printf("\nNeed approval for: %v\n\nCommand: \n%v\n", tc.Function, builder.CommandString())
 		approved := inputscan.GetYesNo(ctx, "Approve this tool call?", false)
 
 		if approved {

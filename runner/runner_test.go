@@ -498,6 +498,7 @@ func TestRunStep(t *testing.T) {
 		name      string
 		setupMsgs func(t *testing.T, f *fixture)
 		wantType  RunnerResponseType
+		wantMsg   string
 		wantErr   bool
 		errPart   string
 	}{
@@ -561,15 +562,57 @@ func TestRunStep(t *testing.T) {
 			wantType: ResponseTypeToolResults,
 		},
 		{
-			name: "assistant with unknown tool errors",
+			name: "assistant with unknown tool returns error message",
 			setupMsgs: func(t *testing.T, f *fixture) {
 				f.runner.AddMessage(models.Message{
 					Role:      models.RoleAssistant,
-					ToolCalls: []models.ToolCall{{ToolCallID: "call_nope", Function: "nope"}},
+					ToolCalls: []models.ToolCall{{ToolCallID: "call_nope", Function: "nope", Args: "{}"}},
 				})
 			},
-			wantErr: true,
-			errPart: "tool not defined",
+			wantType: ResponseTypeToolResults,
+			wantMsg:  "cannot run tool call 'nope': tool not defined: nope",
+		},
+		{
+			name: "assistant with failing command returns error message",
+			setupMsgs: func(t *testing.T, f *fixture) {
+				writeTestTool(t, f.runner, "fail", true, []string{"false"})
+				require.NoError(t, f.runner.loadTools())
+				f.runner.AddMessage(models.Message{
+					Role:      models.RoleAssistant,
+					ToolCalls: []models.ToolCall{{ToolCallID: "call_fail", Function: "fail", Args: "{}"}},
+				})
+			},
+			wantType: ResponseTypeToolResults,
+			wantMsg:  "cannot run tool call 'fail': running tool 'fail' failed",
+		},
+		{
+			name: "assistant with invalid parameters returns error message",
+			setupMsgs: func(t *testing.T, f *fixture) {
+				content := `
+enabled: true
+trusted: true
+tool:
+  name: strict
+  parameters:
+    type: object
+    properties:
+      name:
+        type: string
+    required:
+      - name
+command:
+  - echo
+  - "{{.Params.name}}"
+`
+				require.NoError(t, os.WriteFile(filepath.Join(f.runner.toolsDir, "strict.yaml"), []byte(content), 0o644))
+				require.NoError(t, f.runner.loadTools())
+				f.runner.AddMessage(models.Message{
+					Role:      models.RoleAssistant,
+					ToolCalls: []models.ToolCall{{ToolCallID: "call_strict", Function: "strict", Args: `{}`}},
+				})
+			},
+			wantType: ResponseTypeToolResults,
+			wantMsg:  "cannot run tool call 'strict': cannot create tool call builder: cannot interpolate command: cannot get toolcall args as parameters: tool call parameters not valid",
 		},
 		{
 			name: "assistant text message is done",
@@ -595,6 +638,10 @@ func TestRunStep(t *testing.T) {
 
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantType, resp.Type)
+			if tt.wantMsg != "" {
+				require.Len(t, resp.Messages, 1)
+				assert.Contains(t, resp.Messages[0].Content.String(), tt.wantMsg)
+			}
 		})
 	}
 
@@ -614,7 +661,7 @@ func TestRunStep(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, ResponseTypeAskPermission, resp.Type)
 		require.Len(t, resp.ToApprove, 1)
-		assert.Equal(t, "call_2", resp.ToApprove[0].ToolCallID)
+		assert.Equal(t, "call_2", resp.ToApprove[0].ToolCall.ToolCallID)
 	})
 
 	t.Run("inference error is returned", func(t *testing.T) {
@@ -666,18 +713,6 @@ func TestRunTools(t *testing.T) {
 		assert.Len(t, r.Messages(), 2)
 	})
 
-	t.Run("unknown tool errors", func(t *testing.T) {
-		r, _, _ := newTestRunner(t)
-		r.AddMessage(models.Message{
-			Role:      models.RoleAssistant,
-			ToolCalls: []models.ToolCall{{ToolCallID: "call_x", Function: "nope", Args: "{}"}},
-		})
-
-		_, err := r.RunTools(context.Background())
-		require.Error(t, err)
-		assert.ErrorContains(t, err, "tool not defined")
-	})
-
 	t.Run("rejected tool call produces error message", func(t *testing.T) {
 		r, _, _ := newTestRunner(t)
 		writeTestTool(t, r, "echo", false, []string{"echo", "hi"})
@@ -696,37 +731,6 @@ func TestRunTools(t *testing.T) {
 		assert.Equal(t, "user rejected the running of this tool call", msgs[0].Content.String())
 	})
 
-	t.Run("no decision on untrusted tool errors", func(t *testing.T) {
-		r, _, _ := newTestRunner(t)
-		writeTestTool(t, r, "echo", false, []string{"echo", "hi"})
-		require.NoError(t, r.loadTools())
-
-		r.AddMessage(models.Message{
-			Role: models.RoleAssistant,
-			ToolCalls: []models.ToolCall{
-				{ToolCallID: "call_echo", Function: "echo", Args: "{}", Decision: models.ToolCallDecisionNoDecision},
-			},
-		})
-
-		_, err := r.RunTools(context.Background())
-		require.Error(t, err)
-		assert.ErrorIs(t, err, ErrNoDecision)
-	})
-
-	t.Run("failing command errors", func(t *testing.T) {
-		r, _, _ := newTestRunner(t)
-		writeTestTool(t, r, "fail", true, []string{"false"})
-		require.NoError(t, r.loadTools())
-
-		r.AddMessage(models.Message{
-			Role:      models.RoleAssistant,
-			ToolCalls: []models.ToolCall{{ToolCallID: "call_fail", Function: "fail", Args: "{}"}},
-		})
-
-		_, err := r.RunTools(context.Background())
-		require.Error(t, err)
-		assert.ErrorContains(t, err, "running tool 'fail' failed")
-	})
 }
 
 func TestRunTool(t *testing.T) {

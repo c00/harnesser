@@ -10,6 +10,7 @@ import (
 	"github.com/c00/harnesser/llm/openrouter"
 	"github.com/c00/harnesser/runner"
 	"github.com/c00/harnesser/secrets"
+	"github.com/c00/harnesser/tools"
 	"github.com/spf13/cobra"
 )
 
@@ -95,8 +96,12 @@ func run(cmd *cobra.Command, args []string) error {
 
 	if len(resp.ToApprove) > 0 {
 		fmt.Println("The following tools need approval:")
-		for _, tc := range resp.ToApprove {
-			fmt.Printf("Function: %v, ToolCallID: %v\n", tc.Function, tc.ToolCallID)
+		for _, pending := range resp.ToApprove {
+			builder, err := tools.NewToolCallBuilder(pending.ToolCall, pending.ToolDefinition)
+			if err != nil {
+				return fmt.Errorf("cannot create new tool call builder: %w", err)
+			}
+			fmt.Printf("Function: %v, ToolCallID: %v\n", pending.ToolCall.Function, builder.CommandString())
 		}
 	}
 
