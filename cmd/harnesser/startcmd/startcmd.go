@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"strings"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/c00/harnesser/cmd/internal/setup"
 	"github.com/c00/harnesser/internal/inputscan"
 	"github.com/c00/harnesser/models"
 	"github.com/c00/harnesser/runner"
-	"github.com/c00/harnesser/tools"
 	"github.com/spf13/cobra"
 )
 
@@ -36,43 +36,23 @@ func run(cmd *cobra.Command, args []string) error {
 	}
 
 	initialPrompt := strings.Join(args, " ")
-	if initialPrompt == "" {
-		initialPrompt = inputscan.GetInput(ctx, "You: ")
+	if initialPrompt != "" {
+		agent.AddMessage(models.NewUserTextMessage(initialPrompt))
 	}
 
-	agent.AddMessage(models.NewUserTextMessage(initialPrompt))
+	// Initialize UI
+	model := initialModel(ctx, agent)
 
-	// Run loop
-	for {
-		resp, err := agent.RunStep(ctx)
-		if err != nil {
-			return fmt.Errorf("cannot get response: %w", err)
-		}
-
-		switch resp.Type {
-		case runner.ResponseTypeNew:
-			ok := askForInput(ctx, agent)
-			if !ok {
-				return nil
-			}
-		case runner.ResponseTypeDone:
-			fmt.Println("Conversation is over.")
-			return nil
-		case runner.ResponseTypeInferenceResultNoTools:
-			printMessage(resp)
-			askForInput(ctx, agent)
-		case runner.ResponseTypeInferenceResultWithTools:
-			printMessage(resp)
-		case runner.ResponseTypeToolResults:
-			printMessage(resp)
-		case runner.ResponseTypeAskPermission:
-			// Ask permission
-			err := askPermission(ctx, agent, resp)
-			if err != nil {
-				return fmt.Errorf("asking permission failed: %w", err)
-			}
-		}
+	p := tea.NewProgram(model, tea.WithContext(ctx))
+	finalModel, err := p.Run()
+	if err != nil {
+		return fmt.Errorf("cannot run program: %w", err)
 	}
+	if model, ok := finalModel.(tuiModel); ok && model.err != nil {
+		return model.err
+	}
+	return nil
+
 }
 
 func askForInput(ctx context.Context, agent *runner.Runner) bool {
@@ -83,47 +63,4 @@ func askForInput(ctx context.Context, agent *runner.Runner) bool {
 	agent.AddMessage(models.NewUserTextMessage(strings.TrimSpace(prompt)))
 
 	return true
-}
-
-func askPermission(ctx context.Context, agent *runner.Runner, resp runner.Response) error {
-	// Ask the user for permission to run tools
-	for _, pending := range resp.ToApprove {
-		tc := pending.ToolCall
-		td := pending.ToolDefinition
-
-		builder, err := tools.NewToolCallBuilder(tc, td)
-		if err != nil {
-			return fmt.Errorf("cannot create tool call builder: %w", err)
-		}
-
-		fmt.Printf("\nNeed approval for: %v\n\nCommand: \n%v\n", tc.Function, builder.CommandString())
-		approved := inputscan.GetYesNo(ctx, "Approve this tool call?", false)
-
-		if approved {
-			err := agent.ConfirmToolCall(ctx, tc.ToolCallID, models.ToolCallDecisionApprove)
-			if err != nil {
-				return fmt.Errorf("cannot confirm tool call: %w", err)
-			}
-		} else {
-			err := agent.ConfirmToolCall(ctx, tc.ToolCallID, models.ToolCallDecisionReject)
-			if err != nil {
-				return fmt.Errorf("cannot reject tool call: %w", err)
-			}
-		}
-	}
-
-	return nil
-}
-
-func printMessage(resp runner.Response) {
-	if len(resp.Messages) > 0 {
-		fmt.Print("Agent: ")
-	}
-	for _, msg := range resp.Messages {
-		fmt.Println(msg.Content.String())
-		// Print tool calls if any
-		for _, tc := range msg.ToolCalls {
-			fmt.Println(tc.String())
-		}
-	}
 }

@@ -65,8 +65,6 @@ command:
 
 ## TODO 
 
-- Add tools like read files, edit file, list directory, run command
-  - Add bash command.
 - Create bubbletea textarea input
 - Add support for `allowedSecrets` and `{{ .Secrets.FOO }}` in interpolation.
 - Make 'start' the default if no args are given
@@ -74,10 +72,10 @@ command:
   - {{.WorkingDir}} - for the working directory
   - {{.ListFiles}} - for `ls -al`
   - {{ cat 'some-file-name.txt' }} - to just add the contents of that file to the prompt
-- Make commands easier to spell out, so we can output "Do you want to allow this command? `rm -rf .`" rather than things with weird args 
 - Consider redacting ignored files on ls results. 
   - May be add a "filter" array to tooldefs, with things like 'ignoredFiles', 'secrets', that just does post command filtering on the output.
 
 ### Longer term
 
 - We probably want to add a jsonrpc output for it too.
+- Make it available as a library rather than a standalone tool.
