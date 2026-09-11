@@ -32,6 +32,7 @@ type tuiModel struct {
 
 	state tuiState
 	err   error
+	height int
 }
 
 type runStepResultMsg struct {
@@ -106,6 +107,7 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 				m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width()).Render(m.agent.Messages().String()))
 				m.textarea.Reset()
+				m.updateViewportHeight()
 				m.viewport.GotoBottom()
 
 				return m, tea.Batch(cmds...)
@@ -171,12 +173,8 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.WindowSizeMsg:
 		// b) Layout Calculation
-		// Reserve space for spinner (1) and textarea (5 including borders)
-		verticalMargin := 1 + 5
-
+		m.height = msg.Height
 		m.viewport.SetWidth(msg.Width)
-		m.viewport.SetHeight(max(1, msg.Height-verticalMargin))
-
 		m.textarea.SetWidth(msg.Width)
 		if m.permission != nil {
 			m.permission.SetWidth(msg.Width)
@@ -195,9 +193,20 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 	m.spinner, spCmd = m.spinner.Update(msg)
+	m.updateViewportHeight()
 
 	cmds = append(cmds, tiCmd, vpCmd, spCmd)
 	return m, tea.Batch(cmds...)
+}
+
+func (m *tuiModel) updateViewportHeight() {
+	if m.height <= 0 {
+		return
+	}
+
+	// Reserve one line between the viewport and textarea, plus the status line.
+	verticalMargin := m.textarea.Height() + 2
+	m.viewport.SetHeight(max(1, m.height-verticalMargin))
 }
 
 func (m tuiModel) View() tea.View {
