@@ -465,3 +465,18 @@ func (r *Runner) Messages() models.Messages {
 
 	return messagesCopy
 }
+
+// ToolCallCommand returns the command that will be executed for a tool call.
+func (r *Runner) ToolCallCommand(tc models.ToolCall) (string, error) {
+	td, ok := r.toolDefs[tc.Function]
+	if !ok {
+		return "", fmt.Errorf("tool definition not found for %q", tc.Function)
+	}
+
+	builder, err := tools.NewToolCallBuilder(tc, td)
+	if err != nil {
+		return "", fmt.Errorf("cannot create tool call builder: %w", err)
+	}
+
+	return strings.TrimSpace(builder.CommandString()), nil
+}

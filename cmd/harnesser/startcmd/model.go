@@ -30,8 +30,8 @@ type tuiModel struct {
 	// agent is the LLM Agent
 	agent *runner.Runner
 
-	state tuiState
-	err   error
+	state  tuiState
+	err    error
 	height int
 }
 
@@ -105,7 +105,7 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 				cmds = append(cmds, agentStepCmd(m.ctx, m.agent), m.spinner.Tick)
 
-				m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width()).Render(m.agent.Messages().String()))
+				m.viewport.SetContent(m.renderMessages())
 				m.textarea.Reset()
 				m.updateViewportHeight()
 				m.viewport.GotoBottom()
@@ -146,7 +146,7 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.textarea.Blur()
 			m.permission = permission
 		}
-		m.viewport.SetContent(lipgloss.NewStyle().Width(m.viewport.Width()).Render(m.agent.Messages().String()))
+		m.viewport.SetContent(m.renderMessages())
 		m.viewport.GotoBottom()
 
 	case permissionDecisionMsg:
@@ -272,4 +272,68 @@ func confirmToolCallCmd(ctx context.Context, agent *runner.Runner, msg permissio
 		err := agent.ConfirmToolCall(ctx, msg.toolCallID, msg.decision)
 		return permissionDecisionResultMsg{toolCallID: msg.toolCallID, err: err}
 	}
+}
+
+// renderMessages shows the messages in a user friendly way in the viewport.
+// Uses colors and formatting where applicable
+func (m *tuiModel) renderMessages() string {
+	labelStyles := map[string]lipgloss.Style{
+		"you":       lipgloss.NewStyle().Foreground(lipgloss.Color("39")).Bold(true),
+		"assistant": lipgloss.NewStyle().Foreground(lipgloss.Color("213")).Bold(true),
+		"tool":      lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Bold(true),
+		"result":    lipgloss.NewStyle().Foreground(lipgloss.Color("218")).Bold(true),
+	}
+
+	type renderedMessage struct {
+		label   string
+		tag     string
+		content string
+	}
+
+	messages := make([]renderedMessage, 0, len(m.agent.Messages()))
+	for _, message := range m.agent.Messages() {
+		if message.Role == models.RoleTool {
+			content := message.Content.String()
+			characters := []rune(content)
+			if len(characters) > 200 {
+				content = string(characters[:200]) + " [output truncated]"
+			}
+			messages = append(messages, renderedMessage{tag: "tool", label: "result", content: content})
+		} else {
+			label := "assistant"
+			if message.Role == models.RoleUser {
+				label = "you"
+			}
+
+			content := message.Content.String()
+			if content != "" {
+				messages = append(messages, renderedMessage{tag: "user", label: label, content: content})
+			}
+		}
+
+		for _, toolCall := range message.ToolCalls {
+			command, err := m.agent.ToolCallCommand(toolCall)
+			if err != nil {
+				command = strings.TrimSpace(toolCall.Function + " " + toolCall.Args)
+			}
+			messages = append(messages, renderedMessage{tag: "tool", label: "tool", content: command})
+		}
+	}
+
+	var rendered strings.Builder
+	previousLabel := ""
+	for _, message := range messages {
+		if rendered.Len() > 0 {
+			rendered.WriteString("\n")
+			if message.tag != previousLabel {
+				rendered.WriteString("\n")
+			}
+		}
+		rendered.WriteString(labelStyles[message.label].Render("[" + message.label + "]:"))
+		rendered.WriteString(" ")
+		rendered.WriteString(strings.TrimSpace(message.content))
+		previousLabel = message.tag
+	}
+
+	return lipgloss.Wrap(rendered.String(), max(1, m.viewport.Width()), "")
 }
