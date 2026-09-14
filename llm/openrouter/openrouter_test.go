@@ -1,6 +1,7 @@
 package openrouter
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -156,4 +157,74 @@ func TestGenerateDoesNotRetry(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Equal(t, int32(1), requestCount.Load())
+}
+
+func TestGenerateStream(t *testing.T) {
+	t.Parallel()
+
+	requestChannel := make(chan openrouterlib.ChatCompletionRequest, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request openrouterlib.ChatCompletionRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		requestChannel <- request
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: {\"model\":\"test/model\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"Hel\"},\"finish_reason\":null}]}\n"))
+		_, _ = w.Write([]byte("data: {\"model\":\"test/model\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"lo\",\"reasoning_details\":[{\"id\":\"reasoning_1\",\"index\":0,\"type\":\"reasoning.text\",\"text\":\"think\"}],\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"lookup\",\"arguments\":\"{\\\"q\\\":\"}}]},\"finish_reason\":null}]}\n"))
+		_, _ = w.Write([]byte("data: {\"model\":\"test/model\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_details\":[{\"index\":0,\"type\":\"reasoning.text\",\"text\":\"ing\"}],\"tool_calls\":[{\"index\":0,\"type\":\"function\",\"function\":{\"arguments\":\"\\\"value\\\"}\"}}]},\"finish_reason\":\"tool_calls\"}]}\n"))
+		_, _ = w.Write([]byte("data: {\"model\":\"test/model\",\"choices\":[],\"usage\":{\"prompt_tokens\":11,\"completion_tokens\":7,\"prompt_tokens_details\":{\"cached_tokens\":3}}}\n"))
+		_, _ = w.Write([]byte("data: [DONE]\n"))
+	}))
+	t.Cleanup(server.Close)
+
+	clientConfig := openrouterlib.DefaultConfig("test-api-key")
+	clientConfig.BaseURL = server.URL
+	provider := New(t.Context(), models.LlmConfig{Models: []string{"test/model"}}, "test-api-key")
+	provider.client = openrouterlib.NewClientWithConfig(*clientConfig)
+
+	var deltas []models.MessageDelta
+	result, err := provider.GenerateStream(t.Context(), []models.Message{
+		{Role: models.RoleUser, Content: []models.MessagePart{{Type: models.PartText, Text: "hello"}}},
+	}, nil, func(delta models.MessageDelta) {
+		deltas = append(deltas, delta)
+	})
+
+	require.NoError(t, err)
+	request := <-requestChannel
+	assert.True(t, request.Stream)
+	require.NotNil(t, request.StreamOptions)
+	assert.True(t, request.StreamOptions.IncludeUsage)
+	require.Len(t, deltas, 4)
+	assert.Equal(t, "Hel", deltas[0].Text)
+	assert.Equal(t, "lo", deltas[1].Text)
+	require.Len(t, deltas[1].ToolCalls, 1)
+	assert.Equal(t, `{"q":`, deltas[1].ToolCalls[0].Arguments)
+	assert.Empty(t, deltas[3])
+
+	assert.Equal(t, models.RoleAssistant, result.Role)
+	require.Len(t, result.Content, 1)
+	assert.Equal(t, "Hello", result.Content[0].Text)
+	require.Len(t, result.Reasoning, 1)
+	assert.Equal(t, "thinking", result.Reasoning[0].Text)
+	require.Len(t, result.ToolCalls, 1)
+	assert.Equal(t, "call_1", result.ToolCalls[0].ToolCallID)
+	assert.Equal(t, "lookup", result.ToolCalls[0].Function)
+	assert.Equal(t, `{"q":"value"}`, result.ToolCalls[0].Args)
+	assert.Equal(t, models.FinishReasonToolCalls, result.FinishReason)
+	assert.Equal(t, "test/model", result.Model)
+	assert.Equal(t, 11, result.InputTokens)
+	assert.Equal(t, 7, result.OutputTokens)
+	assert.Equal(t, 3, result.CachedTokens)
+}
+
+func TestGenerateStreamRejectsNilCallback(t *testing.T) {
+	t.Parallel()
+
+	provider := New(t.Context(), models.LlmConfig{Models: []string{"test/model"}}, "test-api-key")
+	_, err := provider.GenerateStream(t.Context(), nil, nil, nil)
+
+	require.EqualError(t, err, "stream callback is nil")
 }

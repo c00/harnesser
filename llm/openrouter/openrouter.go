@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/c00/harnesser/llm"
@@ -21,6 +23,7 @@ type OpenRouter struct {
 }
 
 var _ llm.LlmProvider = (*OpenRouter)(nil)
+var _ llm.LlmStreamingProvider = (*OpenRouter)(nil)
 
 // var _ llm.StructuredOutputProvider = (*OpenRouter)(nil)
 
@@ -118,10 +121,8 @@ func convertTools(tools []models.Tool) []openrouter.Tool {
 	return orTools
 }
 
-func (o *OpenRouter) Generate(ctx context.Context, messages []models.Message, tools []models.Tool) (models.Message, error) {
+func (o *OpenRouter) completionRequest(ctx context.Context, messages []models.Message, tools []models.Tool) openrouter.ChatCompletionRequest {
 	orMessages := convertMessages(messages)
-	orTools := convertTools(tools)
-
 	if len(orMessages) > 0 {
 		last := &orMessages[len(orMessages)-1]
 		if len(last.Content.Multi) > 0 {
@@ -132,27 +133,31 @@ func (o *OpenRouter) Generate(ctx context.Context, messages []models.Message, to
 		}
 	}
 
-	// fmt.Printf("Body: %v", jsonhelpers.TryParseJson(orMessages))
-
 	var reasoningEffort *string
 	if o.config.Reasoning != "" {
 		effort := string(o.config.Reasoning)
 		reasoningEffort = &effort
 	}
 
+	return openrouter.ChatCompletionRequest{
+		Models:    o.config.Models,
+		MaxTokens: o.config.MaxOutputTokens,
+		Messages:  orMessages,
+		Tools:     convertTools(tools),
+		Reasoning: &openrouter.ChatCompletionReasoning{
+			Effort: reasoningEffort,
+		},
+	}
+}
+
+func (o *OpenRouter) Generate(ctx context.Context, messages []models.Message, tools []models.Tool) (models.Message, error) {
+	// fmt.Printf("Body: %v", jsonhelpers.TryParseJson(orMessages))
+
 	start := time.Now()
 	o.logger.DebugContext(ctx, "Generate", "messageCount", len(messages), "toolCount", len(tools))
 	resp, err := o.client.CreateChatCompletion(
 		ctx,
-		openrouter.ChatCompletionRequest{
-			Models:    o.config.Models,
-			MaxTokens: o.config.MaxOutputTokens,
-			Messages:  orMessages,
-			Tools:     orTools,
-			Reasoning: &openrouter.ChatCompletionReasoning{
-				Effort: reasoningEffort,
-			},
-		},
+		o.completionRequest(ctx, messages, tools),
 	)
 
 	if err != nil {
@@ -205,18 +210,7 @@ func (o *OpenRouter) Generate(ctx context.Context, messages []models.Message, to
 
 	// Handle reasoning details
 	if len(choice.ReasoningDetails) > 0 {
-		result.Reasoning = make([]models.ReasoningDetails, len(choice.ReasoningDetails))
-		for i, r := range choice.ReasoningDetails {
-			result.Reasoning[i] = models.ReasoningDetails{
-				ReasoningID: r.ID,
-				Index:       r.Index,
-				Type:        string(r.Type),
-				Text:        r.Text,
-				Summary:     r.Summary,
-				Data:        r.Data,
-				Format:      r.Format,
-			}
-		}
+		result.Reasoning = convertReasoningDetails(choice.ReasoningDetails)
 	}
 
 	if len(choice.ToolCalls) > 0 {
@@ -228,6 +222,157 @@ func (o *OpenRouter) Generate(ctx context.Context, messages []models.Message, to
 			})
 		}
 	}
+
+	return result, nil
+}
+
+func convertReasoningDetails(details []openrouter.ChatCompletionReasoningDetails) []models.ReasoningDetails {
+	result := make([]models.ReasoningDetails, len(details))
+	for i, detail := range details {
+		result[i] = models.ReasoningDetails{
+			ReasoningID: detail.ID,
+			Index:       detail.Index,
+			Type:        string(detail.Type),
+			Text:        detail.Text,
+			Summary:     detail.Summary,
+			Data:        detail.Data,
+			Format:      detail.Format,
+		}
+	}
+	return result
+}
+
+func (o *OpenRouter) GenerateStream(ctx context.Context, messages []models.Message, tools []models.Tool, callback llm.StreamDeltaFunc) (models.Message, error) {
+	if callback == nil {
+		return models.Message{}, errors.New("stream callback is nil")
+	}
+
+	request := o.completionRequest(ctx, messages, tools)
+	request.Stream = true
+	request.StreamOptions = &openrouter.StreamOptions{IncludeUsage: true}
+
+	start := time.Now()
+	o.logger.DebugContext(ctx, "GenerateStream", "messageCount", len(messages), "toolCount", len(tools))
+	stream, err := o.client.CreateChatCompletionStream(ctx, request)
+	if err != nil {
+		return models.Message{}, fmt.Errorf("chat completion stream error: %w", err)
+	}
+	defer stream.Close()
+
+	result := models.Message{Role: models.RoleAssistant}
+	var textContent strings.Builder
+	reasoningIndexes := make(map[int]int)
+	toolCallIndexes := make(map[int]int)
+	sawChoice := false
+	sawFinish := false
+
+	for {
+		chunk, recvErr := stream.Recv()
+		if errors.Is(recvErr, io.EOF) {
+			if err := ctx.Err(); err != nil {
+				return models.Message{}, fmt.Errorf("chat completion stream error: %w", err)
+			}
+			break
+		}
+		if recvErr != nil {
+			return models.Message{}, fmt.Errorf("chat completion stream error: %w", recvErr)
+		}
+
+		if chunk.Model != "" {
+			result.Model = chunk.Model
+		}
+		if chunk.Usage != nil {
+			result.OutputTokens = chunk.Usage.CompletionTokens
+			result.InputTokens = chunk.Usage.PromptTokens
+			result.CachedTokens = chunk.Usage.PromptTokenDetails.CachedTokens
+		}
+
+		delta := models.MessageDelta{}
+		if len(chunk.Choices) > 0 {
+			sawChoice = true
+			choice := chunk.Choices[0]
+			if choice.Delta.Role != "" {
+				result.Role = models.MessageRole(choice.Delta.Role)
+			}
+
+			delta.Text = choice.Delta.Content
+			textContent.WriteString(delta.Text)
+			delta.Reasoning = convertReasoningDetails(choice.Delta.ReasoningDetails)
+			for _, reasoning := range delta.Reasoning {
+				position, ok := reasoningIndexes[reasoning.Index]
+				if !ok {
+					reasoningIndexes[reasoning.Index] = len(result.Reasoning)
+					result.Reasoning = append(result.Reasoning, reasoning)
+					continue
+				}
+
+				assembled := &result.Reasoning[position]
+				if reasoning.ReasoningID != "" {
+					assembled.ReasoningID = reasoning.ReasoningID
+				}
+				if reasoning.Type != "" {
+					assembled.Type = reasoning.Type
+				}
+				assembled.Text += reasoning.Text
+				assembled.Summary += reasoning.Summary
+				assembled.Data += reasoning.Data
+				if reasoning.Format != "" {
+					assembled.Format = reasoning.Format
+				}
+			}
+
+			for position, toolCall := range choice.Delta.ToolCalls {
+				index := position
+				if toolCall.Index != nil {
+					index = *toolCall.Index
+				}
+				delta.ToolCalls = append(delta.ToolCalls, models.ToolCallDelta{
+					Index:     index,
+					ID:        toolCall.ID,
+					Function:  toolCall.Function.Name,
+					Arguments: toolCall.Function.Arguments,
+				})
+
+				assembledPosition, ok := toolCallIndexes[index]
+				if !ok {
+					toolCallIndexes[index] = len(result.ToolCalls)
+					result.ToolCalls = append(result.ToolCalls, models.ToolCall{
+						ToolCallID: toolCall.ID,
+						Function:   toolCall.Function.Name,
+						Args:       toolCall.Function.Arguments,
+					})
+					continue
+				}
+
+				assembled := &result.ToolCalls[assembledPosition]
+				if toolCall.ID != "" {
+					assembled.ToolCallID = toolCall.ID
+				}
+				if toolCall.Function.Name != "" {
+					assembled.Function = toolCall.Function.Name
+				}
+				assembled.Args += toolCall.Function.Arguments
+			}
+
+			if choice.FinishReason != "" && choice.FinishReason != openrouter.FinishReasonNull {
+				result.FinishReason = models.FinishReason(choice.FinishReason)
+				sawFinish = true
+			}
+		}
+
+		callback(delta)
+	}
+
+	if !sawChoice {
+		return models.Message{}, errors.New("no choices returned from LLM stream")
+	}
+	if !sawFinish {
+		return models.Message{}, errors.New("LLM stream ended before a finish reason was returned")
+	}
+	if textContent.Len() > 0 {
+		result.Content = []models.MessagePart{{Type: models.PartText, Text: textContent.String()}}
+	}
+	result.GenerationTime = time.Since(start)
 
 	return result, nil
 }

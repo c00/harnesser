@@ -13,6 +13,13 @@ type LlmProvider interface {
 	Config() models.LlmConfig
 }
 
+type LlmStreamingProvider interface {
+	LlmProvider
+	GenerateStream(ctx context.Context, messages []models.Message, tools []models.Tool, callback StreamDeltaFunc) (models.Message, error)
+}
+
+type StreamDeltaFunc func(models.MessageDelta)
+
 // StructuredOutputProvider is an llm provider that returns data in a specific format.
 type StructuredOutputProvider interface {
 	LlmProvider

@@ -113,3 +113,45 @@ func TestMockLLM_Generate(t *testing.T) {
 		})
 	}
 }
+
+func TestMockLLM_GenerateStream(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockllm.MockLLM{}
+	mock.AddToolcallResponse("weather", "get_weather", `{"city":"Amsterdam"}`, "Let me check.")
+	mock.Response["weather"] = models.Message{
+		Role:      mock.Response["weather"].Role,
+		Content:   mock.Response["weather"].Content,
+		ToolCalls: mock.Response["weather"].ToolCalls,
+		Reasoning: []models.ReasoningDetails{
+			{Index: 0, Type: "reasoning.text", Text: "Need the weather."},
+		},
+	}
+
+	var deltas []models.MessageDelta
+	result, err := mock.GenerateStream(t.Context(), []models.Message{
+		models.NewUserTextMessage("What is the weather?"),
+	}, nil, func(delta models.MessageDelta) {
+		deltas = append(deltas, delta)
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, mock.Response["weather"], result)
+	require.Len(t, deltas, 1)
+	assert.Equal(t, "Let me check.", deltas[0].Text)
+	assert.Equal(t, []models.ReasoningDetails(result.Reasoning), deltas[0].Reasoning)
+	require.Len(t, deltas[0].ToolCalls, 1)
+	assert.Equal(t, 0, deltas[0].ToolCalls[0].Index)
+	assert.Equal(t, "call_get_weather", deltas[0].ToolCalls[0].ID)
+	assert.Equal(t, "get_weather", deltas[0].ToolCalls[0].Function)
+	assert.Equal(t, `{"city":"Amsterdam"}`, deltas[0].ToolCalls[0].Arguments)
+}
+
+func TestMockLLM_GenerateStreamRejectsNilCallback(t *testing.T) {
+	t.Parallel()
+
+	mock := mockllm.New()
+	_, err := mock.GenerateStream(t.Context(), nil, nil, nil)
+
+	require.EqualError(t, err, "stream callback is nil")
+}

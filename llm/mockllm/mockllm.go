@@ -12,6 +12,7 @@ import (
 )
 
 var _ llm.LlmProvider = (*MockLLM)(nil)
+var _ llm.LlmStreamingProvider = (*MockLLM)(nil)
 var _ llm.StructuredOutputProvider = (*MockLLM)(nil)
 
 // MockLLM is a fake LLM that will return responses based on predefined keywords or phrases (case insensitive)
@@ -170,4 +171,33 @@ func (m *MockLLM) Generate(ctx context.Context, messages []models.Message, tools
 		Content: []models.MessagePart{{Type: "text", Text: "I don't have a response to that."}},
 		Model:   m.Config().Models[0],
 	}, nil
+}
+
+func (m *MockLLM) GenerateStream(ctx context.Context, messages []models.Message, tools []models.Tool, callback llm.StreamDeltaFunc) (models.Message, error) {
+	if callback == nil {
+		return models.Message{}, errors.New("stream callback is nil")
+	}
+
+	response, err := m.Generate(ctx, messages, tools)
+	if err != nil {
+		return models.Message{}, err
+	}
+
+	delta := models.MessageDelta{Reasoning: response.Reasoning}
+	for _, part := range response.Content {
+		if part.Type == models.PartText {
+			delta.Text += part.Text
+		}
+	}
+	for index, toolCall := range response.ToolCalls {
+		delta.ToolCalls = append(delta.ToolCalls, models.ToolCallDelta{
+			Index:     index,
+			ID:        toolCall.ToolCallID,
+			Function:  toolCall.Function,
+			Arguments: toolCall.Args,
+		})
+	}
+
+	callback(delta)
+	return response, nil
 }

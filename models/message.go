@@ -68,6 +68,22 @@ type ReasoningDetails struct {
 	Format      string `json:"format,omitempty"`
 }
 
+// MessageDelta contains append-only fragments produced while generating a message.
+type MessageDelta struct {
+	Text      string
+	Reasoning []ReasoningDetails
+	ToolCalls []ToolCallDelta
+}
+
+// ToolCallDelta contains an incremental update for a tool call. Arguments may
+// be split across several deltas and must be concatenated in stream order.
+type ToolCallDelta struct {
+	Index     int
+	ID        string
+	Function  string
+	Arguments string
+}
+
 func NewMessage(role MessageRole, text string) Message {
 	return Message{
 		Role: role,
