@@ -41,9 +41,12 @@ func run(cmd *cobra.Command, args []string) error {
 	}
 
 	// Initialize UI
-	model := initialModel(ctx, agent)
+	var p *tea.Program
+	model := initialModel(ctx, agent, func(msg tea.Msg) {
+		p.Send(msg)
+	})
 
-	p := tea.NewProgram(model, tea.WithContext(ctx))
+	p = tea.NewProgram(model, tea.WithContext(ctx))
 	finalModel, err := p.Run()
 	if err != nil {
 		return fmt.Errorf("cannot run program: %w", err)
