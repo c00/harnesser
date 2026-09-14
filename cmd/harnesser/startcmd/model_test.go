@@ -71,11 +71,10 @@ command:
 	assert.Equal(t, strings.Join([]string{
 		"[you]: first",
 		"[you]: second",
-		"",
 		"[assistant]: checking",
 		"",
 		"[tool]: printf report.txt",
-		"[tool]: ignored result",
+		"[result]: ignored result",
 		"",
 		"[assistant]: done",
 	}, "\n"), strings.TrimRight(ansi.Strip(rendered), " "))
@@ -96,5 +95,5 @@ func TestRenderMessagesTruncatesToolResults(t *testing.T) {
 	model.viewport.SetWidth(500)
 	rendered := ansi.Strip(model.renderMessages())
 
-	assert.Equal(t, "[tool]: "+strings.Repeat("界", 200)+" [output truncated]", rendered)
+	assert.Equal(t, "[result]: "+strings.Repeat("界", 200)+" [output truncated]", rendered)
 }

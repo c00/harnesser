@@ -134,9 +134,26 @@ func (o *OpenRouter) Generate(ctx context.Context, messages []models.Message, to
 
 	// fmt.Printf("Body: %v", jsonhelpers.TryParseJson(orMessages))
 
+	var reasoningEffort *string
+	if o.config.Reasoning != "" {
+		effort := string(o.config.Reasoning)
+		reasoningEffort = &effort
+	}
+
 	start := time.Now()
 	o.logger.DebugContext(ctx, "Generate", "messageCount", len(messages), "toolCount", len(tools))
-	resp, err := o.tryGenerate(ctx, orMessages, orTools, nil)
+	resp, err := o.client.CreateChatCompletion(
+		ctx,
+		openrouter.ChatCompletionRequest{
+			Models:    o.config.Models,
+			MaxTokens: o.config.MaxOutputTokens,
+			Messages:  orMessages,
+			Tools:     orTools,
+			Reasoning: &openrouter.ChatCompletionReasoning{
+				Effort: reasoningEffort,
+			},
+		},
+	)
 
 	if err != nil {
 		return models.Message{}, fmt.Errorf("chat completion error: %w", err)
@@ -213,63 +230,4 @@ func (o *OpenRouter) Generate(ctx context.Context, messages []models.Message, to
 	}
 
 	return result, nil
-}
-
-// tryGenerate Will try to generate a response, and retry a few times n failure. It will also switch out models if possible.
-func (o *OpenRouter) tryGenerate(ctx context.Context, orMessages []openrouter.ChatCompletionMessage, orTools []openrouter.Tool, responseFormat *openrouter.ChatCompletionResponseFormat) (openrouter.ChatCompletionResponse, error) {
-	var resp openrouter.ChatCompletionResponse
-	var err error
-	try := 0
-	maxTries := 1
-	for {
-		var reasoningEffort *string
-		if o.config.Reasoning != "" {
-			effort := string(o.config.Reasoning)
-			reasoningEffort = &effort
-		}
-		o.logger.DebugContext(ctx, "Creating Chat Completion", "messageCount", len(orMessages), "toolCount", len(orTools))
-		resp, err = o.client.CreateChatCompletion(
-			ctx,
-			openrouter.ChatCompletionRequest{
-				// Model:     model,
-				Models:    o.config.Models,
-				MaxTokens: o.config.MaxOutputTokens,
-				Messages:  orMessages,
-				Tools:     orTools,
-				Reasoning: &openrouter.ChatCompletionReasoning{
-					Effort: reasoningEffort,
-				},
-				ResponseFormat: responseFormat,
-			},
-		)
-
-		if err == nil && len(resp.Choices) == 0 {
-			err = errors.New("no choices from LLM")
-		}
-		if err == nil {
-			return resp, nil
-		}
-
-		// TODO I don't think this is the right type.
-		var reqErr *openrouter.RequestError
-		if errors.As(err, &reqErr) {
-			switch reqErr.HTTPStatusCode {
-			case 408, 500, 502, 524:
-				// These are retryable, continue the loop
-				o.logger.WarnContext(ctx, "Retryable HTTP error", "status", reqErr.HTTPStatusCode)
-			default:
-				return resp, fmt.Errorf("openrouter request error: %w", err)
-			}
-		}
-
-		try++
-		if try >= maxTries {
-			return resp, fmt.Errorf("too many retries: %w", err)
-		}
-
-		o.logger.WarnContext(ctx, "LLM call failed, will retry...", "error", err.Error())
-
-		// Backoff a little bit before retrying
-		time.Sleep(time.Duration(try) * time.Second)
-	}
 }

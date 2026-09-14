@@ -1,16 +1,15 @@
-//go:build integration
-
 package openrouter
 
 import (
-	"os"
-	"reflect"
+	"net/http"
+	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
-	"github.com/c00/harnesser/llm"
-	"github.com/c00/harnesser/llm/llmtestsuite"
 	"github.com/c00/harnesser/models"
 	openrouterlib "github.com/revrost/go-openrouter"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func ptr(s string) *string { return &s }
@@ -131,29 +130,30 @@ func TestConvertMessages(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			got := convertMessages(tt.input)
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("convertMessages() =\n  %+v\nwant\n  %+v", got, tt.want)
-			}
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }
 
-func TestOpenRouter_LlmTestSuite(t *testing.T) {
+func TestGenerateDoesNotRetry(t *testing.T) {
 	t.Parallel()
 
-	apiKey := os.Getenv("OPENROUTER_API_KEY")
-	if apiKey == "" {
-		t.Skip("No OPENROUTER_API_KEY set. Skipping openrouter llm test")
-	}
+	var requestCount atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requestCount.Add(1)
+		http.Error(w, `{"error":{"message":"temporary failure"}}`, http.StatusInternalServerError)
+	}))
+	t.Cleanup(server.Close)
 
-	cfg := models.LlmConfig{
-		Models:          []string{"openai/gpt-3.5-turbo-16k"},
-		Name:            "openrouter",
-		MaxOutputTokens: 25,
-	}
+	clientConfig := openrouterlib.DefaultConfig("test-api-key")
+	clientConfig.BaseURL = server.URL
+	provider := New(t.Context(), models.LlmConfig{Models: []string{"test/model"}}, "test-api-key")
+	provider.client = openrouterlib.NewClientWithConfig(*clientConfig)
 
-	llmtestsuite.RunLlmTestSuite(t, func() llm.LlmProvider {
-		llm := New(t.Context(), cfg, apiKey)
-		return llm
-	})
+	_, err := provider.Generate(t.Context(), []models.Message{
+		{Role: models.RoleUser, Content: []models.MessagePart{{Type: "text", Text: "hello"}}},
+	}, nil)
+
+	require.Error(t, err)
+	assert.Equal(t, int32(1), requestCount.Load())
 }

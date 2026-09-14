@@ -65,16 +65,26 @@ command:
 
 ## TODO 
 
+- Add streaming support for the cli
 - Add support for `allowedSecrets` and `{{ .Secrets.FOO }}` in interpolation.
+- Add support for `requiredSecrets`, so a tool will throw a hard error if it does not exist.
 - Make 'start' the default if no args are given
 - Make prompts dynamic so we can add stuff there.
   - {{.WorkingDir}} - for the working directory
   - {{.ListFiles}} - for `ls -al`
   - {{ cat 'some-file-name.txt' }} - to just add the contents of that file to the prompt
+  - {{ cat-dir 'some-dir' }} - Add contents of all text files in `some-dir`
 - Consider redacting ignored files on ls results. 
   - May be add a "filter" array to tooldefs, with things like 'ignoredFiles', 'secrets', that just does post command filtering on the output.
+- Remove openrouter retry logic. Not needed for this.
+- Add status messages like "querying llm", "running tools" rather than "working..."
 
 ### Longer term
 
 - We probably want to add a jsonrpc output for it too.
 - Make it available as a library rather than a standalone tool.
+
+### Dogfooding
+
+- Make a matrix client, with thread support that uses this lib
+- Setup a harness for creating custom quickshell configs.
