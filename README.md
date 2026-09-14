@@ -65,7 +65,6 @@ command:
 
 ## TODO 
 
-- Create bubbletea textarea input
 - Add support for `allowedSecrets` and `{{ .Secrets.FOO }}` in interpolation.
 - Make 'start' the default if no args are given
 - Make prompts dynamic so we can add stuff there.
