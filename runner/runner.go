@@ -283,15 +283,38 @@ func (r *Runner) RunPrompt(ctx context.Context, msg models.Message) (models.Mess
 	return r.RunInference(ctx)
 }
 
-// RunInference runs inference to the LLM Provider.
-func (r *Runner) RunInference(ctx context.Context) (models.Message, error) {
+// runInference runs inference to the LLM Provider. If callback is set, runs streaming.
+func (r *Runner) runInference(ctx context.Context, cb llm.StreamDeltaFunc) (models.Message, error) {
 	allMsgs := make([]models.Message, len(r.prompts))
 	copy(allMsgs, r.prompts)
 	allMsgs = append(allMsgs, r.messages...)
 
-	resp, err := r.llm.Generate(ctx, allMsgs, r.tools())
-	if err != nil {
-		return models.Message{}, fmt.Errorf("cannot generate llm response: %w", err)
+	shouldStream := true
+
+	// If no callback, don't stream
+	if cb == nil {
+		shouldStream = false
+	}
+
+	// If streaming is not supported, don't stream
+	streamingProvider, ok := r.llm.(llm.LlmStreamingProvider)
+	if !ok {
+		shouldStream = false
+	}
+
+	var err error
+	var resp models.Message
+
+	if shouldStream {
+		resp, err = streamingProvider.GenerateStream(ctx, allMsgs, r.tools(), cb)
+		if err != nil {
+			return models.Message{}, fmt.Errorf("cannot generate llm response: %w", err)
+		}
+	} else {
+		resp, err = r.llm.Generate(ctx, allMsgs, r.tools())
+		if err != nil {
+			return models.Message{}, fmt.Errorf("cannot generate llm response: %w", err)
+		}
 	}
 
 	r.AddMessage(resp)
@@ -303,8 +326,22 @@ func (r *Runner) RunInference(ctx context.Context) (models.Message, error) {
 	return resp, nil
 }
 
+// RunInferenceStream runs inference to the LLM Provider with streaming output.
+func (r *Runner) RunInferenceStream(ctx context.Context, cb llm.StreamDeltaFunc) (models.Message, error) {
+	if cb == nil {
+		return models.Message{}, errors.New("stream callback cannot be nil")
+	}
+
+	return r.runInference(ctx, cb)
+}
+
+// RunInference runs inference to the LLM Provider.
+func (r *Runner) RunInference(ctx context.Context) (models.Message, error) {
+	return r.runInference(ctx, nil)
+}
+
 // RunStep runs the next step. This is either inference or tool calls
-func (r *Runner) RunStep(ctx context.Context) (Response, error) {
+func (r *Runner) runStep(ctx context.Context, cb llm.StreamDeltaFunc) (Response, error) {
 	// Nothing to do
 	if len(r.messages) == 0 {
 		return Response{Type: ResponseTypeNew, Messages: models.Messages{}}, nil
@@ -313,7 +350,7 @@ func (r *Runner) RunStep(ctx context.Context) (Response, error) {
 	lastMsg := r.messages[len(r.messages)-1]
 
 	if lastMsg.Role == models.RoleUser || lastMsg.Role == models.RoleTool {
-		msg, err := r.RunInference(ctx)
+		msg, err := r.runInference(ctx, cb)
 		if err != nil {
 			return Response{}, fmt.Errorf("cannot run inference: %w", err)
 		}
@@ -366,6 +403,16 @@ func (r *Runner) RunStep(ctx context.Context) (Response, error) {
 		Messages: models.Messages{},
 		Type:     ResponseTypeDone,
 	}, nil
+}
+
+// RunStep runs the next step. This is either inference or tool calls
+func (r *Runner) RunStep(ctx context.Context) (Response, error) {
+	return r.runStep(ctx, nil)
+}
+
+// RunStep runs the next step. This is either inference or tool calls
+func (r *Runner) RunStepStream(ctx context.Context, cb llm.StreamDeltaFunc) (Response, error) {
+	return r.runStep(ctx, cb)
 }
 
 // Looks at the current latest message, and runs tool calls if any
