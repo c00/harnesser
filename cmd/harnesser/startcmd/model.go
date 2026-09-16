@@ -36,6 +36,8 @@ type tuiModel struct {
 	partialMsg models.Message
 	// Set to the current length of agent messages when starting inference, so we can track when inference is done.
 	partialMsgIdx int
+	// runOnStart is set when the command includes a prompt that needs inference.
+	runOnStart bool
 
 	state  tuiState
 	err    error
@@ -59,7 +61,7 @@ const (
 	askPermission tuiState = "ask-permission"
 )
 
-func initialModel(ctx context.Context, agent *runner.Runner, send func(tea.Msg)) tuiModel {
+func initialModel(ctx context.Context, agent *runner.Runner, runOnStart bool, send func(tea.Msg)) tuiModel {
 	// 1. Initialize Spinner
 	s := spinner.New()
 	s.Spinner = spinner.Dot
@@ -68,7 +70,11 @@ func initialModel(ctx context.Context, agent *runner.Runner, send func(tea.Msg))
 	// 2. Initialize Textarea
 	ta := textarea.New()
 	ta.Placeholder = "Type a message..."
-	ta.Blur()
+	if runOnStart {
+		ta.Blur()
+	} else {
+		ta.Focus()
+	}
 	ta.SetWidth(30)
 	ta.SetHeight(3)
 	ta.ShowLineNumbers = false
@@ -76,14 +82,20 @@ func initialModel(ctx context.Context, agent *runner.Runner, send func(tea.Msg))
 	ta.MinHeight = 1
 	ta.MaxHeight = 10
 
+	state := ready
+	if runOnStart {
+		state = busy
+	}
+
 	return tuiModel{
-		ctx:      ctx,
-		agent:    agent,
-		spinner:  s,
-		textarea: ta,
-		viewport: viewport.New(),
-		state:    busy,
-		send:     send,
+		ctx:        ctx,
+		agent:      agent,
+		spinner:    s,
+		textarea:   ta,
+		viewport:   viewport.New(),
+		state:      state,
+		send:       send,
+		runOnStart: runOnStart,
 		partialMsg: models.Message{
 			Role:    models.RoleAssistant,
 			Content: models.MessageParts{{Type: "text"}},
@@ -93,7 +105,10 @@ func initialModel(ctx context.Context, agent *runner.Runner, send func(tea.Msg))
 }
 
 func (m tuiModel) Init() tea.Cmd {
-	return tea.Batch(m.spinner.Tick, textarea.Blink, m.agentStepCmd(m.ctx))
+	if m.runOnStart {
+		return tea.Batch(m.spinner.Tick, textarea.Blink, m.agentStepCmd(m.ctx))
+	}
+	return textarea.Blink
 }
 
 func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -207,6 +222,9 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.permission != nil {
 			m.permission.SetWidth(msg.Width)
 		}
+		m.updateViewportHeight()
+		m.viewport.SetContent(m.renderMessages())
+		m.viewport.GotoBottom()
 	}
 
 	// c) Delegate updates to sub-components

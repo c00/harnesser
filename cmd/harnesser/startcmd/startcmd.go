@@ -42,7 +42,7 @@ func run(cmd *cobra.Command, args []string) error {
 
 	// Initialize UI
 	var p *tea.Program
-	model := initialModel(ctx, agent, func(msg tea.Msg) {
+	model := initialModel(ctx, agent, initialPrompt != "", func(msg tea.Msg) {
 		p.Send(msg)
 	})
 

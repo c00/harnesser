@@ -65,10 +65,7 @@ command:
 
 ## TODO 
 
-- Scrolling of viewport does not work anymore. It expects up and down and those are being caught by the textarea. We should probably scroll on mouse over?
 - Add markdown parsing support
-
-- Add streaming support for the cli (in progress)
 - Add support for `allowedSecrets` and `{{ .Secrets.FOO }}` in interpolation.
 - Add support for `requiredSecrets`, so a tool will throw a hard error if it does not exist.
 - Make 'start' the default if no args are given
@@ -79,7 +76,6 @@ command:
   - {{ cat-dir 'some-dir' }} - Add contents of all text files in `some-dir`
 - Consider redacting ignored files on ls results. 
   - May be add a "filter" array to tooldefs, with things like 'ignoredFiles', 'secrets', that just does post command filtering on the output.
-- Remove openrouter retry logic. Not needed for this.
 - Add status messages like "querying llm", "running tools" rather than "working..."
 
 ### Longer term

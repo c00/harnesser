@@ -18,7 +18,7 @@ import (
 func TestViewportHeightTracksTextareaHeight(t *testing.T) {
 	agent, err := runner.NewRunner(nil, filepath.Join(t.TempDir(), "prompts"), filepath.Join(t.TempDir(), "history"), filepath.Join(t.TempDir(), "tools"), "")
 	require.NoError(t, err)
-	model := initialModel(t.Context(), agent, func(m tea.Msg) {})
+	model := initialModel(t.Context(), agent, false, func(m tea.Msg) {})
 	model.state = ready
 	model.textarea.Focus()
 
@@ -41,10 +41,50 @@ func TestViewportHeightTracksTextareaHeight(t *testing.T) {
 	assert.Equal(t, 20, lipgloss.Height(model.View().Content))
 }
 
+func TestInitialModelStartupState(t *testing.T) {
+	tests := []struct {
+		name        string
+		runOnStart  bool
+		wantState   tuiState
+		wantFocused bool
+	}{
+		{name: "waits for input without a prompt", wantState: ready, wantFocused: true},
+		{name: "runs when a prompt was supplied", runOnStart: true, wantState: busy, wantFocused: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			agent, err := runner.NewRunner(nil, filepath.Join(t.TempDir(), "prompts"), filepath.Join(t.TempDir(), "history"), filepath.Join(t.TempDir(), "tools"), "")
+			require.NoError(t, err)
+
+			model := initialModel(t.Context(), agent, tt.runOnStart, func(m tea.Msg) {})
+
+			assert.Equal(t, tt.wantState, model.state)
+			assert.Equal(t, tt.wantFocused, model.textarea.Focused())
+			assert.Equal(t, tt.runOnStart, model.runOnStart)
+		})
+	}
+}
+
+func TestInitialModelRendersLoadedHistory(t *testing.T) {
+	agent, err := runner.NewRunner(nil, filepath.Join(t.TempDir(), "prompts"), filepath.Join(t.TempDir(), "history"), filepath.Join(t.TempDir(), "tools"), "")
+	require.NoError(t, err)
+	agent.AddMessage(models.NewUserTextMessage("previous question"))
+	agent.AddMessage(models.NewAssistantMessage("previous answer"))
+	model := initialModel(t.Context(), agent, false, func(m tea.Msg) {})
+
+	updated, _ := model.Update(tea.WindowSizeMsg{Width: 80, Height: 20})
+	model = updated.(tuiModel)
+
+	rendered := ansi.Strip(model.viewport.View())
+	assert.Contains(t, rendered, "[you]: previous question")
+	assert.Contains(t, rendered, "[assistant]: previous answer")
+}
+
 func TestViewportHeightReservesPermissionPrompt(t *testing.T) {
 	agent, err := runner.NewRunner(nil, filepath.Join(t.TempDir(), "prompts"), filepath.Join(t.TempDir(), "history"), filepath.Join(t.TempDir(), "tools"), "")
 	require.NoError(t, err)
-	model := initialModel(t.Context(), agent, func(m tea.Msg) {})
+	model := initialModel(t.Context(), agent, false, func(m tea.Msg) {})
 	model.state = askPermission
 	model.permission = &permissionModel{
 		requests: []permissionRequest{{
@@ -89,7 +129,7 @@ command:
 	agent.AddMessage(models.NewToolResultMessage("call_1", "ignored result"))
 	agent.AddMessage(models.NewAssistantMessage("done"))
 
-	model := initialModel(t.Context(), agent, func(m tea.Msg) {})
+	model := initialModel(t.Context(), agent, false, func(m tea.Msg) {})
 	model.viewport.SetWidth(80)
 	rendered := model.renderMessages()
 
@@ -116,7 +156,7 @@ func TestRenderMessagesTruncatesToolResults(t *testing.T) {
 	require.NoError(t, err)
 	agent.AddMessage(models.NewToolResultMessage("call_1", strings.Repeat("界", 201)))
 
-	model := initialModel(t.Context(), agent, func(m tea.Msg) {})
+	model := initialModel(t.Context(), agent, false, func(m tea.Msg) {})
 	model.viewport.SetWidth(500)
 	rendered := ansi.Strip(model.renderMessages())
 
