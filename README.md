@@ -65,8 +65,8 @@ command:
 
 ## TODO 
 
-- BUG permissions seem to not work anymore.
-- Scrolling of viewport does not work anymore. (probably state related)
+- Scrolling of viewport does not work anymore. It expects up and down and those are being caught by the textarea. We should probably scroll on mouse over?
+- Add markdown parsing support
 
 - Add streaming support for the cli (in progress)
 - Add support for `allowedSecrets` and `{{ .Secrets.FOO }}` in interpolation.

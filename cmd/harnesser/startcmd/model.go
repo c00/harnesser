@@ -104,6 +104,12 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// a) Handle global keys
 	switch msg := msg.(type) {
+	case tea.MouseMsg:
+		switch msg.String() {
+		case "wheelup", "wheeldown":
+			m.viewport, vpCmd = m.viewport.Update(msg)
+			return m, vpCmd
+		}
 	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "ctrl+c", "esc":
@@ -277,6 +283,7 @@ func (m tuiModel) View() tea.View {
 
 	view := tea.NewView(content)
 	view.AltScreen = true
+	view.MouseMode = tea.MouseModeCellMotion
 	return view
 }
 
