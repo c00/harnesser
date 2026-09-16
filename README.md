@@ -65,7 +65,10 @@ command:
 
 ## TODO 
 
-- Add streaming support for the cli
+- BUG permissions seem to not work anymore.
+- Scrolling of viewport does not work anymore. (probably state related)
+
+- Add streaming support for the cli (in progress)
 - Add support for `allowedSecrets` and `{{ .Secrets.FOO }}` in interpolation.
 - Add support for `requiredSecrets`, so a tool will throw a hard error if it does not exist.
 - Make 'start' the default if no args are given

@@ -30,6 +30,13 @@ type tuiModel struct {
 	// agent is the LLM Agent
 	agent *runner.Runner
 
+	// send func to send messages to the tea program
+	send func(tea.Msg)
+	// partialMsg is the current streaming message
+	partialMsg models.Message
+	// Set to the current length of agent messages when starting inference, so we can track when inference is done.
+	partialMsgIdx int
+
 	state  tuiState
 	err    error
 	height int
@@ -40,6 +47,10 @@ type runStepResultMsg struct {
 	err      error
 }
 
+type partialMsgUpdate struct {
+	delta models.MessageDelta
+}
+
 type tuiState string
 
 const (
@@ -48,7 +59,7 @@ const (
 	askPermission tuiState = "ask-permission"
 )
 
-func initialModel(ctx context.Context, agent *runner.Runner) tuiModel {
+func initialModel(ctx context.Context, agent *runner.Runner, send func(tea.Msg)) tuiModel {
 	// 1. Initialize Spinner
 	s := spinner.New()
 	s.Spinner = spinner.Dot
@@ -72,11 +83,17 @@ func initialModel(ctx context.Context, agent *runner.Runner) tuiModel {
 		textarea: ta,
 		viewport: viewport.New(),
 		state:    busy,
+		send:     send,
+		partialMsg: models.Message{
+			Role:    models.RoleAssistant,
+			Content: models.MessageParts{{Type: "text"}},
+		},
+		partialMsgIdx: len(agent.Messages()),
 	}
 }
 
 func (m tuiModel) Init() tea.Cmd {
-	return tea.Batch(m.spinner.Tick, textarea.Blink, agentStepCmd(m.ctx, m.agent))
+	return tea.Batch(m.spinner.Tick, textarea.Blink, m.agentStepCmd(m.ctx))
 }
 
 func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -103,7 +120,7 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.textarea.Blur()
 				m.agent.AddMessage(models.NewUserTextMessage(input))
 
-				cmds = append(cmds, agentStepCmd(m.ctx, m.agent), m.spinner.Tick)
+				cmds = append(cmds, m.agentStepCmd(m.ctx), m.spinner.Tick)
 
 				m.viewport.SetContent(m.renderMessages())
 				m.textarea.Reset()
@@ -113,6 +130,11 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Batch(cmds...)
 			}
 		}
+
+	case partialMsgUpdate:
+		m.partialMsg.Content[0].Text += msg.delta.Text
+		m.viewport.SetContent(m.renderMessages())
+		m.viewport.GotoBottom()
 
 	case runStepResultMsg:
 		if msg.err != nil {
@@ -132,7 +154,7 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.state = busy // For clarity
 
 			// Run another step
-			cmds = append(cmds, agentStepCmd(m.ctx, m.agent))
+			cmds = append(cmds, m.agentStepCmd(m.ctx))
 
 		case runner.ResponseTypeDone:
 			return m, tea.Quit
@@ -168,7 +190,7 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.permission.done() {
 			m.permission = nil
 			m.state = busy
-			cmds = append(cmds, agentStepCmd(m.ctx, m.agent), m.spinner.Tick)
+			cmds = append(cmds, m.agentStepCmd(m.ctx), m.spinner.Tick)
 		}
 
 	case tea.WindowSizeMsg:
@@ -256,9 +278,14 @@ func (m tuiModel) View() tea.View {
 	return view
 }
 
-func agentStepCmd(ctx context.Context, agent *runner.Runner) tea.Cmd {
+func (m *tuiModel) agentStepCmd(ctx context.Context) tea.Cmd {
+	m.partialMsgIdx = len(m.agent.Messages())
+	m.partialMsg.Content[0].Text = ""
+
 	return func() tea.Msg {
-		resp, err := agent.RunStep(ctx)
+		resp, err := m.agent.RunStepStream(ctx, func(md models.MessageDelta) {
+			m.send(partialMsgUpdate{delta: md})
+		})
 
 		return runStepResultMsg{
 			response: resp,
@@ -290,7 +317,9 @@ func (m *tuiModel) renderMessages() string {
 		content string
 	}
 
-	messages := make([]renderedMessage, 0, len(m.agent.Messages()))
+	msgCount := len(m.agent.Messages())
+
+	messages := make([]renderedMessage, 0, msgCount)
 	for _, message := range m.agent.Messages() {
 		if message.Role == models.RoleTool {
 			content := message.Content.String()
@@ -307,7 +336,7 @@ func (m *tuiModel) renderMessages() string {
 
 			content := message.Content.String()
 			if content != "" {
-				messages = append(messages, renderedMessage{tag: "user", label: label, content: content})
+				messages = append(messages, renderedMessage{tag: label, label: label, content: content})
 			}
 		}
 
@@ -317,6 +346,18 @@ func (m *tuiModel) renderMessages() string {
 				command = strings.TrimSpace(toolCall.Function + " " + toolCall.Args)
 			}
 			messages = append(messages, renderedMessage{tag: "tool", label: "tool", content: command})
+		}
+	}
+
+	// Render partial message as long as it has content and its index is same as the count.
+	// If the count is bigger, then the completed message has been added which replaces the
+	// temporary message
+	if m.partialMsgIdx >= msgCount {
+		label := "assistant"
+
+		content := m.partialMsg.Content.String()
+		if content != "" {
+			messages = append(messages, renderedMessage{tag: "assistant", label: label, content: content})
 		}
 	}
 

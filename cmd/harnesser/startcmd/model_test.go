@@ -16,7 +16,7 @@ import (
 )
 
 func TestViewportHeightTracksTextareaHeight(t *testing.T) {
-	model := initialModel(t.Context(), nil)
+	model := initialModel(t.Context(), nil, func(m tea.Msg) {})
 	model.state = ready
 	model.textarea.Focus()
 
@@ -64,7 +64,7 @@ command:
 	agent.AddMessage(models.NewToolResultMessage("call_1", "ignored result"))
 	agent.AddMessage(models.NewAssistantMessage("done"))
 
-	model := initialModel(t.Context(), agent)
+	model := initialModel(t.Context(), agent, func(m tea.Msg) {})
 	model.viewport.SetWidth(80)
 	rendered := model.renderMessages()
 
@@ -91,7 +91,7 @@ func TestRenderMessagesTruncatesToolResults(t *testing.T) {
 	require.NoError(t, err)
 	agent.AddMessage(models.NewToolResultMessage("call_1", strings.Repeat("界", 201)))
 
-	model := initialModel(t.Context(), agent)
+	model := initialModel(t.Context(), agent, func(m tea.Msg) {})
 	model.viewport.SetWidth(500)
 	rendered := ansi.Strip(model.renderMessages())
 
