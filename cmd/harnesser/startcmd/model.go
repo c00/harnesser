@@ -226,8 +226,10 @@ func (m *tuiModel) updateViewportHeight() {
 		return
 	}
 
-	// Reserve one line between the viewport and textarea, plus the status line.
 	verticalMargin := m.textarea.Height() + 2
+	if m.state == askPermission && m.permission != nil {
+		verticalMargin = lipgloss.Height(m.permission.View().Content)
+	}
 	m.viewport.SetHeight(max(1, m.height-verticalMargin))
 }
 

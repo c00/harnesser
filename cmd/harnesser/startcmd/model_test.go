@@ -16,7 +16,9 @@ import (
 )
 
 func TestViewportHeightTracksTextareaHeight(t *testing.T) {
-	model := initialModel(t.Context(), nil, func(m tea.Msg) {})
+	agent, err := runner.NewRunner(nil, filepath.Join(t.TempDir(), "prompts"), filepath.Join(t.TempDir(), "history"), filepath.Join(t.TempDir(), "tools"), "")
+	require.NoError(t, err)
+	model := initialModel(t.Context(), agent, func(m tea.Msg) {})
 	model.state = ready
 	model.textarea.Focus()
 
@@ -36,6 +38,29 @@ func TestViewportHeightTracksTextareaHeight(t *testing.T) {
 	model.updateViewportHeight()
 	assert.Equal(t, model.textarea.MaxHeight, model.textarea.Height())
 	assert.Equal(t, 8, model.viewport.Height())
+	assert.Equal(t, 20, lipgloss.Height(model.View().Content))
+}
+
+func TestViewportHeightReservesPermissionPrompt(t *testing.T) {
+	agent, err := runner.NewRunner(nil, filepath.Join(t.TempDir(), "prompts"), filepath.Join(t.TempDir(), "history"), filepath.Join(t.TempDir(), "tools"), "")
+	require.NoError(t, err)
+	model := initialModel(t.Context(), agent, func(m tea.Msg) {})
+	model.state = askPermission
+	model.permission = &permissionModel{
+		requests: []permissionRequest{{
+			toolCallID: "call_1",
+			function:   "shell",
+			command:    strings.Repeat("long command ", 8),
+		}},
+		width: 20,
+	}
+
+	updated, _ := model.Update(tea.WindowSizeMsg{Width: 20, Height: 20})
+	model = updated.(tuiModel)
+
+	promptHeight := lipgloss.Height(model.permission.View().Content)
+	assert.Greater(t, promptHeight, 7)
+	assert.Equal(t, 20-promptHeight, model.viewport.Height())
 	assert.Equal(t, 20, lipgloss.Height(model.View().Content))
 }
 
