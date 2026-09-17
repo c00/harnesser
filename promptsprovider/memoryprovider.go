@@ -8,6 +8,12 @@ type MemoryProvider struct {
 	prompts []Prompt
 }
 
+func NewMemoryProvider() *MemoryProvider {
+	return &MemoryProvider{
+		prompts: []Prompt{},
+	}
+}
+
 func (p *MemoryProvider) Prompts() Prompts {
 	return p.prompts
 }

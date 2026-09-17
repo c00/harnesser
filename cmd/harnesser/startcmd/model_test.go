@@ -8,6 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/c00/harnesser/historyprovider"
 	"github.com/c00/harnesser/models"
 	"github.com/c00/harnesser/promptsprovider"
 	"github.com/c00/harnesser/runner"
@@ -16,12 +17,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func NewPromptsProvider() *promptsprovider.MemoryProvider {
-	return &promptsprovider.MemoryProvider{}
-}
-
 func TestViewportHeightTracksTextareaHeight(t *testing.T) {
-	agent, err := runner.NewRunner(nil, NewPromptsProvider(), filepath.Join(t.TempDir(), "history"), filepath.Join(t.TempDir(), "tools"), "")
+	agent, err := runner.NewRunner(nil, promptsprovider.NewMemoryProvider(), historyprovider.NewMemoryProvider(), filepath.Join(t.TempDir(), "tools"), "")
 	require.NoError(t, err)
 	model := initialModel(t.Context(), agent, false, func(m tea.Msg) {})
 	model.state = ready
@@ -59,7 +56,7 @@ func TestInitialModelStartupState(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			agent, err := runner.NewRunner(nil, NewPromptsProvider(), filepath.Join(t.TempDir(), "history"), filepath.Join(t.TempDir(), "tools"), "")
+			agent, err := runner.NewRunner(nil, promptsprovider.NewMemoryProvider(), historyprovider.NewMemoryProvider(), filepath.Join(t.TempDir(), "tools"), "")
 			require.NoError(t, err)
 
 			model := initialModel(t.Context(), agent, tt.runOnStart, func(m tea.Msg) {})
@@ -72,7 +69,7 @@ func TestInitialModelStartupState(t *testing.T) {
 }
 
 func TestInitialModelRendersLoadedHistory(t *testing.T) {
-	agent, err := runner.NewRunner(nil, NewPromptsProvider(), filepath.Join(t.TempDir(), "history"), filepath.Join(t.TempDir(), "tools"), "")
+	agent, err := runner.NewRunner(nil, promptsprovider.NewMemoryProvider(), historyprovider.NewMemoryProvider(), filepath.Join(t.TempDir(), "tools"), "")
 	require.NoError(t, err)
 	agent.AddMessage(models.NewUserTextMessage("previous question"))
 	agent.AddMessage(models.NewAssistantMessage("previous answer"))
@@ -87,7 +84,7 @@ func TestInitialModelRendersLoadedHistory(t *testing.T) {
 }
 
 func TestViewportHeightReservesPermissionPrompt(t *testing.T) {
-	agent, err := runner.NewRunner(nil, NewPromptsProvider(), filepath.Join(t.TempDir(), "history"), filepath.Join(t.TempDir(), "tools"), "")
+	agent, err := runner.NewRunner(nil, promptsprovider.NewMemoryProvider(), historyprovider.NewMemoryProvider(), filepath.Join(t.TempDir(), "tools"), "")
 	require.NoError(t, err)
 	model := initialModel(t.Context(), agent, false, func(m tea.Msg) {})
 	model.state = askPermission
@@ -121,7 +118,7 @@ command:
   - '{{.Params.path}}'
 `), 0o644))
 
-	agent, err := runner.NewRunner(nil, NewPromptsProvider(), filepath.Join(dir, "history"), toolsDir, "")
+	agent, err := runner.NewRunner(nil, promptsprovider.NewMemoryProvider(), historyprovider.NewMemoryProvider(), toolsDir, "")
 	require.NoError(t, err)
 	agent.AddMessage(models.NewUserTextMessage("first"))
 	agent.AddMessage(models.NewUserTextMessage("second"))
@@ -158,7 +155,7 @@ command:
 }
 
 func TestRenderMessagesTruncatesToolResults(t *testing.T) {
-	agent, err := runner.NewRunner(nil, NewPromptsProvider(), filepath.Join(t.TempDir(), "history"), filepath.Join(t.TempDir(), "tools"), "")
+	agent, err := runner.NewRunner(nil, promptsprovider.NewMemoryProvider(), historyprovider.NewMemoryProvider(), filepath.Join(t.TempDir(), "tools"), "")
 	require.NoError(t, err)
 	agent.AddMessage(models.NewToolResultMessage("call_1", strings.Repeat("界", 201)))
 

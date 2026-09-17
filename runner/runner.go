@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/c00/harnesser/historyprovider"
 	"github.com/c00/harnesser/llm"
 	"github.com/c00/harnesser/models"
 	"github.com/c00/harnesser/promptsprovider"
@@ -49,37 +50,33 @@ type PendingToolcall struct {
 type Runner struct {
 	llm             llm.LlmProvider
 	promptsProvider promptsprovider.PromptsReader
-	historyDir      string
+	histProv        historyprovider.HistoryProvider
 	toolsDir        string
 
 	// points to the file in the history dir
 	// if unset, will generate a name
 	// if exists, will overwrite / append
 	// if new, will create
-	name string
+	// NOTE don't need this, because we can prime the historyprovider before the runner.
+	// The runner should not be responsible for managing history.
+	// name string
 
 	messages models.Messages
 	toolDefs map[string]models.ToolDefinition
 }
 
-func NewRunner(llm llm.LlmProvider, promptsProvider promptsprovider.PromptsReader, histDir, toolsDir string, name string) (*Runner, error) {
-	if name == "" {
-		name = fmt.Sprintf("%v.yaml", time.Now().Format(time.RFC3339))
-	}
-
+func NewRunner(llm llm.LlmProvider, promptsProvider promptsprovider.PromptsReader, histProv historyprovider.HistoryProvider, toolsDir string, name string) (*Runner, error) {
 	runner := Runner{
 		llm:             llm,
 		promptsProvider: promptsProvider,
-		historyDir:      histDir,
+		histProv:        histProv,
 		toolsDir:        toolsDir,
-		name:            name,
 		messages:        models.Messages{},
 		toolDefs:        map[string]models.ToolDefinition{},
 	}
 
 	err := errors.Join(
 		runner.ensureDir(runner.toolsDir),
-		runner.ensureDir(runner.historyDir),
 	)
 
 	if err != nil {
@@ -171,72 +168,17 @@ func (r *Runner) loadTools() error {
 }
 
 // Load history from file (if any)
-func (r *Runner) LoadHistory() error {
-	// If no name is set, silently return
-	if r.name == "" {
-		return nil
-	}
-
-	r.messages = models.Messages{}
-
-	paths := []string{r.name}
-	if !filepath.IsAbs(r.name) {
-		paths = append(paths, filepath.Join(r.historyDir, r.name))
-	}
-
-	var historyPath string
-	for _, path := range paths {
-		info, err := os.Stat(path)
-		if err == nil {
-			if info.IsDir() {
-				return fmt.Errorf("history path %q is a directory", path)
-			}
-			historyPath = path
-			break
-		}
-		if !errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("cannot stat history %q: %w", path, err)
-		}
-	}
-
-	if historyPath == "" {
-		return nil
-	}
-
-	data, err := os.ReadFile(historyPath)
-	if err != nil {
-		return fmt.Errorf("cannot read history %q: %w", historyPath, err)
-	}
-	if len(data) == 0 {
-		return nil
-	}
-	if err := yaml.Unmarshal(data, &r.messages); err != nil {
-		return fmt.Errorf("cannot parse history %q: %w", historyPath, err)
-	}
-
-	return nil
+func (r *Runner) LoadHistory() {
+	r.messages = r.histProv.Get().Messages
 }
 
 func (r *Runner) WriteHistory() error {
-	if r.name == "" {
-		return nil
-	}
+	entry := r.histProv.Get()
+	entry.Messages = r.messages
 
-	historyPath := r.name
-	if !filepath.IsAbs(historyPath) && filepath.Dir(historyPath) == "." {
-		historyPath = filepath.Join(r.historyDir, historyPath)
-	}
-
-	if err := os.MkdirAll(filepath.Dir(historyPath), 0o755); err != nil {
-		return fmt.Errorf("cannot create history directory: %w", err)
-	}
-
-	data, err := yaml.Marshal(r.messages)
+	err := r.histProv.Save(entry)
 	if err != nil {
-		return fmt.Errorf("cannot encode history: %w", err)
-	}
-	if err := os.WriteFile(historyPath, data, 0o644); err != nil {
-		return fmt.Errorf("cannot write history %q: %w", historyPath, err)
+		return fmt.Errorf("cannot write history: %w", err)
 	}
 
 	return nil

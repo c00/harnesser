@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	"github.com/c00/harnesser/config"
+	"github.com/c00/harnesser/historyprovider"
 	"github.com/c00/harnesser/landlock"
 	"github.com/c00/harnesser/llm/openrouter"
 	"github.com/c00/harnesser/promptsprovider"
@@ -39,32 +40,36 @@ func Setup(cmd *cobra.Command) (*runner.Runner, error) {
 	// TODO abstract this away to support multiple llm backends
 	provider := openrouter.New(ctx, cfg.LlmConfig, apiKey)
 
-	// Create runner
+	// Initialize History
+	history := historyprovider.NewFileProvider(historyDir)
+
 	historyFile, _ := cmd.Flags().GetString("thread")
-
-	if cont, _ := cmd.Flags().GetBool("continue"); cont {
-		// set history file to the last file
-		lastHistoryFile, err := chooseLatest(historyDir)
+	cont, _ := cmd.Flags().GetBool("continue")
+	// Use latest file to continue
+	if historyFile == "" && cont {
+		list, err := history.List()
 		if err != nil {
-			return nil, fmt.Errorf("cannot get last file from history: %w", err)
+			return nil, fmt.Errorf("cannot list history files: %w", err)
 		}
-
-		historyFile = lastHistoryFile
+		if len(list) > 0 {
+			historyFile = list[0]
+		}
 	}
+
+	// If it's still empty, create a new one
+	if historyFile == "" {
+		historyFile = historyprovider.NewKey()
+	}
+	history.Select(historyFile)
 
 	prompts, err := promptsprovider.NewFileProvider(promptsDir)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create prompts provider: %w", err)
 	}
 
-	agent, err := runner.NewRunner(provider, prompts, historyDir, toolsDir, historyFile)
+	agent, err := runner.NewRunner(provider, prompts, history, toolsDir, historyFile)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create runner: %w", err)
-	}
-
-	err = agent.LoadHistory()
-	if err != nil {
-		return nil, fmt.Errorf("cannot load history: %w", err)
 	}
 
 	// landlock

@@ -74,6 +74,10 @@ func (p *FileProvider) List() ([]string, error) {
 	return filenames, nil
 }
 
+func (p *FileProvider) Get() HistoryEntry {
+	return p.currentEntry
+}
+
 // Set the current history to this key.
 func (p *FileProvider) Select(key string) (HistoryEntry, error) {
 	p.currentKey = key

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/c00/harnesser/historyprovider"
 	"github.com/c00/harnesser/llm/mockllm"
 	"github.com/c00/harnesser/models"
 	"github.com/c00/harnesser/promptsprovider"
@@ -19,6 +20,10 @@ func newMockPromptProvider() *promptsprovider.MemoryProvider {
 	return p
 }
 
+func newHistProvider() *historyprovider.MemoryProvider {
+	return historyprovider.NewMemoryProvider()
+}
+
 // newTestRunner creates a Runner with empty dirs and a mock LLM.
 func newTestRunner(t *testing.T) (*Runner, *mockllm.MockLLM, string) {
 	t.Helper()
@@ -29,7 +34,7 @@ func newTestRunner(t *testing.T) (*Runner, *mockllm.MockLLM, string) {
 	r, err := NewRunner(
 		llm,
 		newMockPromptProvider(),
-		filepath.Join(dir, "history"),
+		newHistProvider(),
 		filepath.Join(dir, "tools"),
 		"",
 	)
@@ -66,39 +71,23 @@ func boolStr(b bool) string {
 }
 
 func TestNewRunner(t *testing.T) {
+	// TODO remove as soon as tools also have a provider
 	t.Run("creates dirs and generates name", func(t *testing.T) {
 		dir := t.TempDir()
 		r, err := NewRunner(mockllm.New(),
 			newMockPromptProvider(),
-			filepath.Join(dir, "history"),
+			newHistProvider(),
 			filepath.Join(dir, "tools"),
 			"",
 		)
 		require.NoError(t, err)
 
-		assert.DirExists(t, r.historyDir)
 		assert.DirExists(t, r.toolsDir)
-		assert.NotEmpty(t, r.name)
-		assert.True(t, filepath.IsAbs(r.name) || filepath.Dir(r.name) == ".", "generated name should be a bare filename, got %q", r.name)
-		assert.Equal(t, ".yaml", filepath.Ext(r.name))
-	})
-
-	t.Run("uses provided name", func(t *testing.T) {
-		dir := t.TempDir()
-		r, err := NewRunner(mockllm.New(),
-			newMockPromptProvider(),
-			filepath.Join(dir, "history"),
-			filepath.Join(dir, "tools"),
-			"my-session.yaml",
-		)
-		require.NoError(t, err)
-		assert.Equal(t, "my-session.yaml", r.name)
 	})
 
 	t.Run("loads tools", func(t *testing.T) {
 		dir := t.TempDir()
 		toolsDir := filepath.Join(dir, "tools")
-		histDir := filepath.Join(dir, "history")
 
 		require.NoError(t, os.MkdirAll(toolsDir, 0o755))
 		require.NoError(t, os.WriteFile(filepath.Join(toolsDir, "echo.yaml"), []byte(`
@@ -111,7 +100,7 @@ command:
   - hello
 `), 0o644))
 
-		r, err := NewRunner(mockllm.New(), newMockPromptProvider(), histDir, toolsDir, "")
+		r, err := NewRunner(mockllm.New(), newMockPromptProvider(), newHistProvider(), toolsDir, "")
 		require.NoError(t, err)
 
 		require.Contains(t, r.toolDefs, "echo")
@@ -124,7 +113,7 @@ command:
 		require.NoError(t, os.MkdirAll(toolsDir, 0o755))
 		require.NoError(t, os.WriteFile(filepath.Join(toolsDir, "bad.yaml"), []byte(":\n  - not: [valid"), 0o644))
 
-		_, err := NewRunner(mockllm.New(), newMockPromptProvider(), filepath.Join(dir, "history"), toolsDir, "")
+		_, err := NewRunner(mockllm.New(), newMockPromptProvider(), newHistProvider(), toolsDir, "")
 		require.Error(t, err)
 		assert.ErrorContains(t, err, "cannot load tools")
 	})
@@ -196,118 +185,6 @@ command:
 	})
 }
 
-func TestLoadHistory(t *testing.T) {
-	t.Run("no name set is a no-op", func(t *testing.T) {
-		r, _, _ := newTestRunner(t)
-		r.name = ""
-		r.messages = models.Messages{models.NewUserTextMessage("existing")}
-
-		require.NoError(t, r.LoadHistory())
-		assert.Len(t, r.Messages(), 1, "should not reset messages when name is empty")
-	})
-
-	t.Run("missing file returns empty history", func(t *testing.T) {
-		r, _, _ := newTestRunner(t)
-		r.name = "missing.yaml"
-
-		require.NoError(t, r.LoadHistory())
-		assert.Empty(t, r.Messages())
-	})
-
-	t.Run("loads history from history dir", func(t *testing.T) {
-		r, _, _ := newTestRunner(t)
-		r.name = "session.yaml"
-
-		require.NoError(t, os.WriteFile(filepath.Join(r.historyDir, "session.yaml"), []byte(`
-- role: user
-  content:
-    - type: text
-      text: hello
-- role: assistant
-  content:
-    - type: text
-      text: hi there
-`), 0o644))
-
-		require.NoError(t, r.LoadHistory())
-		msgs := r.Messages()
-		require.Len(t, msgs, 2)
-		assert.Equal(t, models.RoleUser, msgs[0].Role)
-		assert.Equal(t, "hello", msgs[0].Content.String())
-		assert.Equal(t, models.RoleAssistant, msgs[1].Role)
-	})
-
-	t.Run("absolute name is used directly", func(t *testing.T) {
-		r, _, _ := newTestRunner(t)
-		abs := filepath.Join(t.TempDir(), "abs-history.yaml")
-		r.name = abs
-
-		require.NoError(t, os.WriteFile(abs, []byte(`
-- role: user
-  content:
-    - type: text
-      text: from abs path
-`), 0o644))
-
-		require.NoError(t, r.LoadHistory())
-		require.Len(t, r.Messages(), 1)
-		assert.Equal(t, "from abs path", r.Messages()[0].Content.String())
-	})
-
-	t.Run("history path that is a directory errors", func(t *testing.T) {
-		r, _, _ := newTestRunner(t)
-		r.name = "adir"
-		require.NoError(t, os.Mkdir(filepath.Join(r.historyDir, "adir"), 0o755))
-
-		err := r.LoadHistory()
-		require.Error(t, err)
-		assert.ErrorContains(t, err, "is a directory")
-	})
-
-	t.Run("invalid yaml errors", func(t *testing.T) {
-		r, _, _ := newTestRunner(t)
-		r.name = "bad.yaml"
-		require.NoError(t, os.WriteFile(filepath.Join(r.historyDir, "bad.yaml"), []byte(":\n  - not: [valid"), 0o644))
-
-		err := r.LoadHistory()
-		require.Error(t, err)
-		assert.ErrorContains(t, err, "cannot parse history")
-	})
-}
-
-func TestWriteHistory(t *testing.T) {
-	t.Run("no name set is a no-op", func(t *testing.T) {
-		r, _, _ := newTestRunner(t)
-		r.name = ""
-
-		require.NoError(t, r.WriteHistory())
-	})
-
-	t.Run("writes to history dir", func(t *testing.T) {
-		r, _, _ := newTestRunner(t)
-		r.name = "out.yaml"
-		r.AddMessage(models.NewUserTextMessage("save me"))
-
-		require.NoError(t, r.WriteHistory())
-		assert.FileExists(t, filepath.Join(r.historyDir, "out.yaml"))
-
-		// Round-trip
-		r2 := &Runner{name: "out.yaml", historyDir: r.historyDir}
-		require.NoError(t, r2.LoadHistory())
-		require.Len(t, r2.Messages(), 1)
-		assert.Equal(t, "save me", r2.Messages()[0].Content.String())
-	})
-
-	t.Run("absolute name is used directly", func(t *testing.T) {
-		r, _, _ := newTestRunner(t)
-		abs := filepath.Join(t.TempDir(), "nested", "abs.yaml")
-		r.name = abs
-
-		require.NoError(t, r.WriteHistory())
-		assert.FileExists(t, abs)
-	})
-}
-
 func TestAddMessage(t *testing.T) {
 	r, _, _ := newTestRunner(t)
 
@@ -354,7 +231,8 @@ func TestConfirmToolCall(t *testing.T) {
 
 	t.Run("sets decision on matching tool call", func(t *testing.T) {
 		r, _, _ := newTestRunner(t)
-		r.name = "confirm.yaml"
+		r.histProv.Select("confirm.yaml")
+
 		r.AddMessage(models.Message{
 			Role:      models.RoleAssistant,
 			ToolCalls: []models.ToolCall{{ToolCallID: "call_1", Function: "echo"}},
@@ -364,10 +242,10 @@ func TestConfirmToolCall(t *testing.T) {
 		assert.Equal(t, models.ToolCallDecisionApprove, r.Messages()[0].ToolCalls[0].Decision)
 
 		// Decision is persisted to history
-		r2 := &Runner{name: "confirm.yaml", historyDir: r.historyDir}
-		require.NoError(t, r2.LoadHistory())
-		require.Len(t, r2.Messages(), 1)
-		assert.Equal(t, models.ToolCallDecisionApprove, r2.Messages()[0].ToolCalls[0].Decision)
+		entry := r.histProv.Get()
+
+		require.Len(t, entry.Messages, 1)
+		assert.Equal(t, models.ToolCallDecisionApprove, entry.Messages[0].ToolCalls[0].Decision)
 	})
 }
 
@@ -430,20 +308,6 @@ func TestRunInference(t *testing.T) {
 		assert.Equal(t, "user msg", llm.messages[1].Content.String())
 		require.Len(t, llm.tools, 1)
 		assert.Equal(t, "echo", llm.tools[0].Name)
-	})
-
-	t.Run("writes history", func(t *testing.T) {
-		r, llm, _ := newTestRunner(t)
-		r.name = "inference.yaml"
-		llm.AddTextResponse("q", "a")
-
-		r.AddMessage(models.NewUserTextMessage("q"))
-		_, err := r.RunInference(context.Background())
-		require.NoError(t, err)
-
-		r2 := &Runner{name: "inference.yaml", historyDir: r.historyDir}
-		require.NoError(t, r2.LoadHistory())
-		require.Len(t, r2.Messages(), 2)
 	})
 
 	t.Run("llm error is returned", func(t *testing.T) {

@@ -68,7 +68,7 @@ command:
 - Refactor all the file-based stuff to be providers instead.
   - the cli will use the file-based providers. But for library and other use, other providers can be used.
   - Prompts: DONE
-  - History: TODO
+  - History: UPDATE RUNNER
   - Tools:   TODO
 - Add markdown parsing support
 - Add support for `allowedSecrets` and `{{ .Secrets.FOO }}` in interpolation.
