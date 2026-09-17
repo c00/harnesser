@@ -53,14 +53,6 @@ type Runner struct {
 	histProv        historyprovider.HistoryProvider
 	toolsDir        string
 
-	// points to the file in the history dir
-	// if unset, will generate a name
-	// if exists, will overwrite / append
-	// if new, will create
-	// NOTE don't need this, because we can prime the historyprovider before the runner.
-	// The runner should not be responsible for managing history.
-	// name string
-
 	messages models.Messages
 	toolDefs map[string]models.ToolDefinition
 }
