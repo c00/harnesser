@@ -15,6 +15,7 @@ import (
 	"github.com/c00/harnesser/promptsprovider"
 	"github.com/c00/harnesser/runner"
 	"github.com/c00/harnesser/secrets"
+	"github.com/c00/harnesser/toolsprovider"
 	"github.com/spf13/cobra"
 )
 
@@ -67,7 +68,12 @@ func Setup(cmd *cobra.Command) (*runner.Runner, error) {
 		return nil, fmt.Errorf("cannot create prompts provider: %w", err)
 	}
 
-	agent, err := runner.NewRunner(provider, prompts, history, toolsDir, historyFile)
+	tools, err := toolsprovider.NewFileProvider(toolsDir)
+	if err != nil {
+		return nil, fmt.Errorf("cannot create tools provider: %w", err)
+	}
+
+	agent := runner.NewRunner(provider, prompts, history, tools, historyFile)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create runner: %w", err)
 	}

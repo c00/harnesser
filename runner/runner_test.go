@@ -2,14 +2,13 @@ package runner
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/c00/harnesser/historyprovider"
 	"github.com/c00/harnesser/llm/mockllm"
 	"github.com/c00/harnesser/models"
 	"github.com/c00/harnesser/promptsprovider"
+	"github.com/c00/harnesser/toolsprovider"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -25,42 +24,40 @@ func newHistProvider() *historyprovider.MemoryProvider {
 }
 
 // newTestRunner creates a Runner with empty dirs and a mock LLM.
-func newTestRunner(t *testing.T) (*Runner, *mockllm.MockLLM, string) {
+func newTestRunner(t *testing.T) (*Runner, *mockllm.MockLLM) {
 	t.Helper()
 
-	dir := t.TempDir()
 	llm := mockllm.New()
 
-	r, err := NewRunner(
+	r := NewRunner(
 		llm,
 		newMockPromptProvider(),
 		newHistProvider(),
-		filepath.Join(dir, "tools"),
+		toolsprovider.NewMemoryProvider(),
 		"",
 	)
-	require.NoError(t, err)
 
-	return r, llm, dir
+	return r, llm
 }
 
-// writeTestTool writes a tool definition yaml file into the runner's tools dir.
-func writeTestTool(t *testing.T, r *Runner, name string, trusted bool, command []string) {
+// addTestTool writes a tool definition yaml file into the runner's tools dir.
+func addTestTool(t *testing.T, r *Runner, name string, trusted bool, command []string) {
 	t.Helper()
 
-	content := `
-enabled: true
-trusted: ` + boolStr(trusted) + `
-tool:
-  name: ` + name + `
-  description: test tool
-command:
-`
-	for _, c := range command {
-		content += "  - " + c + "\n"
+	def := models.ToolDefinition{
+		Enabled: true,
+		Trusted: trusted,
+		Tool: models.Tool{
+			Name:        name,
+			Description: "test tool",
+		},
+		Command: command,
 	}
 
-	err := os.WriteFile(filepath.Join(r.toolsDir, name+".yaml"), []byte(content), 0o644)
-	require.NoError(t, err)
+	p, ok := r.toolsProvider.(*toolsprovider.MemoryProvider)
+	assert.True(t, ok)
+
+	p.AddDefinition(def)
 }
 
 func boolStr(b bool) string {
@@ -70,123 +67,8 @@ func boolStr(b bool) string {
 	return "false"
 }
 
-func TestNewRunner(t *testing.T) {
-	// TODO remove as soon as tools also have a provider
-	t.Run("creates dirs and generates name", func(t *testing.T) {
-		dir := t.TempDir()
-		r, err := NewRunner(mockllm.New(),
-			newMockPromptProvider(),
-			newHistProvider(),
-			filepath.Join(dir, "tools"),
-			"",
-		)
-		require.NoError(t, err)
-
-		assert.DirExists(t, r.toolsDir)
-	})
-
-	t.Run("loads tools", func(t *testing.T) {
-		dir := t.TempDir()
-		toolsDir := filepath.Join(dir, "tools")
-
-		require.NoError(t, os.MkdirAll(toolsDir, 0o755))
-		require.NoError(t, os.WriteFile(filepath.Join(toolsDir, "echo.yaml"), []byte(`
-enabled: true
-trusted: true
-tool:
-  name: echo
-command:
-  - echo
-  - hello
-`), 0o644))
-
-		r, err := NewRunner(mockllm.New(), newMockPromptProvider(), newHistProvider(), toolsDir, "")
-		require.NoError(t, err)
-
-		require.Contains(t, r.toolDefs, "echo")
-		assert.True(t, r.toolDefs["echo"].Trusted)
-	})
-
-	t.Run("fails on invalid tool yaml", func(t *testing.T) {
-		dir := t.TempDir()
-		toolsDir := filepath.Join(dir, "tools")
-		require.NoError(t, os.MkdirAll(toolsDir, 0o755))
-		require.NoError(t, os.WriteFile(filepath.Join(toolsDir, "bad.yaml"), []byte(":\n  - not: [valid"), 0o644))
-
-		_, err := NewRunner(mockllm.New(), newMockPromptProvider(), newHistProvider(), toolsDir, "")
-		require.Error(t, err)
-		assert.ErrorContains(t, err, "cannot load tools")
-	})
-}
-
-func TestEnsureDir(t *testing.T) {
-	tests := []struct {
-		name    string
-		dir     string
-		wantErr bool
-	}{
-		{name: "creates nested dir", dir: filepath.Join(t.TempDir(), "a", "b", "c")},
-		{name: "existing dir is fine", dir: t.TempDir()},
-		{name: "fails on file path", dir: func() string {
-			p := filepath.Join(t.TempDir(), "file")
-			require.NoError(t, os.WriteFile(p, []byte("x"), 0o644))
-			return p
-		}(), wantErr: true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			r := &Runner{}
-			err := r.ensureDir(tt.dir)
-			if tt.wantErr {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-				assert.DirExists(t, tt.dir)
-			}
-		})
-	}
-}
-
-func TestLoadTools(t *testing.T) {
-	t.Run("loads yaml and yml, skips others and dirs", func(t *testing.T) {
-		r, _, _ := newTestRunner(t)
-
-		writeTestTool(t, r, "tool-a", true, []string{"echo", "a"})
-		require.NoError(t, os.WriteFile(filepath.Join(r.toolsDir, "tool-b.yml"), []byte(`
-trusted: false
-tool:
-  name: tool-b
-command:
-  - echo
-  - b
-`), 0o644))
-		require.NoError(t, os.WriteFile(filepath.Join(r.toolsDir, "ignored.txt"), []byte("nope"), 0o644))
-		require.NoError(t, os.Mkdir(filepath.Join(r.toolsDir, "subdir"), 0o755))
-
-		require.NoError(t, r.loadTools())
-
-		assert.Len(t, r.toolDefs, 2)
-		require.Contains(t, r.toolDefs, "tool-a")
-		require.Contains(t, r.toolDefs, "tool-b")
-		assert.True(t, r.toolDefs["tool-a"].Trusted)
-		assert.False(t, r.toolDefs["tool-b"].Trusted)
-	})
-
-	t.Run("fails on unreadable dir", func(t *testing.T) {
-		r := &Runner{toolsDir: filepath.Join(t.TempDir(), "does-not-exist")}
-		assert.Error(t, r.loadTools())
-	})
-
-	t.Run("fails on invalid yaml", func(t *testing.T) {
-		r, _, _ := newTestRunner(t)
-		require.NoError(t, os.WriteFile(filepath.Join(r.toolsDir, "bad.yaml"), []byte(":\n  - not: [valid"), 0o644))
-		assert.Error(t, r.loadTools())
-	})
-}
-
 func TestAddMessage(t *testing.T) {
-	r, _, _ := newTestRunner(t)
+	r, _ := newTestRunner(t)
 
 	r.AddMessage(models.NewUserTextMessage("one"))
 	r.AddMessage(models.NewAssistantMessage("two"))
@@ -198,7 +80,7 @@ func TestAddMessage(t *testing.T) {
 }
 
 func TestMessages(t *testing.T) {
-	r, _, _ := newTestRunner(t)
+	r, _ := newTestRunner(t)
 	r.AddMessage(models.NewUserTextMessage("original"))
 
 	got := r.Messages()
@@ -214,12 +96,12 @@ func TestMessages(t *testing.T) {
 
 func TestConfirmToolCall(t *testing.T) {
 	t.Run("empty messages is a no-op", func(t *testing.T) {
-		r, _, _ := newTestRunner(t)
+		r, _ := newTestRunner(t)
 		assert.NoError(t, r.ConfirmToolCall(context.Background(), "call_1", models.ToolCallDecisionApprove))
 	})
 
 	t.Run("unknown tool call id is a no-op", func(t *testing.T) {
-		r, _, _ := newTestRunner(t)
+		r, _ := newTestRunner(t)
 		r.AddMessage(models.Message{
 			Role:      models.RoleAssistant,
 			ToolCalls: []models.ToolCall{{ToolCallID: "call_1", Function: "echo"}},
@@ -230,7 +112,7 @@ func TestConfirmToolCall(t *testing.T) {
 	})
 
 	t.Run("sets decision on matching tool call", func(t *testing.T) {
-		r, _, _ := newTestRunner(t)
+		r, _ := newTestRunner(t)
 		r.histProv.Select("confirm.yaml")
 
 		r.AddMessage(models.Message{
@@ -250,7 +132,7 @@ func TestConfirmToolCall(t *testing.T) {
 }
 
 func TestRunPrompt(t *testing.T) {
-	r, llm, _ := newTestRunner(t)
+	r, llm := newTestRunner(t)
 	llm.AddTextResponse("hello", "hi there")
 
 	resp, err := r.RunPrompt(context.Background(), models.NewUserTextMessage("hello"))
@@ -266,7 +148,7 @@ func TestRunPrompt(t *testing.T) {
 
 func TestRunInference(t *testing.T) {
 	t.Run("returns llm response and appends it", func(t *testing.T) {
-		r, llm, _ := newTestRunner(t)
+		r, llm := newTestRunner(t)
 		llm.AddTextResponse("question", "the answer")
 
 		r.AddMessage(models.NewUserTextMessage("question"))
@@ -282,7 +164,7 @@ func TestRunInference(t *testing.T) {
 	})
 
 	t.Run("sends prompts plus messages to the llm", func(t *testing.T) {
-		r, _, _ := newTestRunner(t)
+		r, _ := newTestRunner(t)
 		provider := &promptsprovider.MemoryProvider{}
 		provider.AddPrompt(promptsprovider.NewPrompt("system", "system prompt"))
 		provider.AddPrompt(promptsprovider.Prompt{
@@ -294,8 +176,7 @@ func TestRunInference(t *testing.T) {
 
 		llm := &capturingLLM{}
 		r.llm = llm
-		writeTestTool(t, r, "echo", true, []string{"echo", "hi"})
-		require.NoError(t, r.loadTools())
+		addTestTool(t, r, "echo", true, []string{"echo", "hi"})
 
 		r.AddMessage(models.NewUserTextMessage("user msg"))
 		_, err := r.RunInference(t.Context())
@@ -311,7 +192,7 @@ func TestRunInference(t *testing.T) {
 	})
 
 	t.Run("llm error is returned", func(t *testing.T) {
-		r, _, _ := newTestRunner(t)
+		r, _ := newTestRunner(t)
 		// MockLLM errors when there are no messages; simulate by clearing prompts and messages
 		// is not possible via RunInference, so use a failing provider instead.
 		r.llm = &failingLLM{}
@@ -349,7 +230,7 @@ func TestRunStep(t *testing.T) {
 		llm    *mockllm.MockLLM
 	}
 	setup := func(t *testing.T) *fixture {
-		r, llm, _ := newTestRunner(t)
+		r, llm := newTestRunner(t)
 		return &fixture{runner: r, llm: llm}
 	}
 
@@ -385,8 +266,7 @@ func TestRunStep(t *testing.T) {
 		{
 			name: "assistant with unapproved untrusted tool call asks permission",
 			setupMsgs: func(t *testing.T, f *fixture) {
-				writeTestTool(t, f.runner, "echo", false, []string{"echo", "hi"})
-				require.NoError(t, f.runner.loadTools())
+				addTestTool(t, f.runner, "echo", false, []string{"echo", "hi"})
 				f.runner.AddMessage(models.Message{
 					Role:      models.RoleAssistant,
 					ToolCalls: []models.ToolCall{{ToolCallID: "call_echo", Function: "echo"}},
@@ -397,8 +277,7 @@ func TestRunStep(t *testing.T) {
 		{
 			name: "assistant with approved untrusted tool call runs tools",
 			setupMsgs: func(t *testing.T, f *fixture) {
-				writeTestTool(t, f.runner, "echo", false, []string{"echo", "hi"})
-				require.NoError(t, f.runner.loadTools())
+				addTestTool(t, f.runner, "echo", false, []string{"echo", "hi"})
 				f.runner.AddMessage(models.Message{
 					Role: models.RoleAssistant,
 					ToolCalls: []models.ToolCall{
@@ -411,8 +290,7 @@ func TestRunStep(t *testing.T) {
 		{
 			name: "assistant with trusted tool call runs tools without approval",
 			setupMsgs: func(t *testing.T, f *fixture) {
-				writeTestTool(t, f.runner, "echo", true, []string{"echo", "hi"})
-				require.NoError(t, f.runner.loadTools())
+				addTestTool(t, f.runner, "echo", true, []string{"echo", "hi"})
 				f.runner.AddMessage(models.Message{
 					Role:      models.RoleAssistant,
 					ToolCalls: []models.ToolCall{{ToolCallID: "call_echo", Function: "echo", Args: "{}"}},
@@ -429,13 +307,12 @@ func TestRunStep(t *testing.T) {
 				})
 			},
 			wantType: ResponseTypeToolResults,
-			wantMsg:  "cannot run tool call 'nope': tool not defined: nope",
+			wantMsg:  "tool not found: nope",
 		},
 		{
 			name: "assistant with failing command returns error message",
 			setupMsgs: func(t *testing.T, f *fixture) {
-				writeTestTool(t, f.runner, "fail", true, []string{"false"})
-				require.NoError(t, f.runner.loadTools())
+				addTestTool(t, f.runner, "fail", true, []string{"false"})
 				f.runner.AddMessage(models.Message{
 					Role:      models.RoleAssistant,
 					ToolCalls: []models.ToolCall{{ToolCallID: "call_fail", Function: "fail", Args: "{}"}},
@@ -443,35 +320,6 @@ func TestRunStep(t *testing.T) {
 			},
 			wantType: ResponseTypeToolResults,
 			wantMsg:  "cannot run tool call 'fail': running tool 'fail' failed",
-		},
-		{
-			name: "assistant with invalid parameters returns error message",
-			setupMsgs: func(t *testing.T, f *fixture) {
-				content := `
-enabled: true
-trusted: true
-tool:
-  name: strict
-  parameters:
-    type: object
-    properties:
-      name:
-        type: string
-    required:
-      - name
-command:
-  - echo
-  - "{{.Params.name}}"
-`
-				require.NoError(t, os.WriteFile(filepath.Join(f.runner.toolsDir, "strict.yaml"), []byte(content), 0o644))
-				require.NoError(t, f.runner.loadTools())
-				f.runner.AddMessage(models.Message{
-					Role:      models.RoleAssistant,
-					ToolCalls: []models.ToolCall{{ToolCallID: "call_strict", Function: "strict", Args: `{}`}},
-				})
-			},
-			wantType: ResponseTypeToolResults,
-			wantMsg:  "cannot run tool call 'strict': cannot create tool call builder: cannot interpolate command: cannot get toolcall args as parameters: tool call parameters not valid",
 		},
 		{
 			name: "assistant text message is done",
@@ -506,8 +354,7 @@ command:
 
 	t.Run("ask permission returns only unapproved calls", func(t *testing.T) {
 		f := setup(t)
-		writeTestTool(t, f.runner, "echo", false, []string{"echo", "hi"})
-		require.NoError(t, f.runner.loadTools())
+		addTestTool(t, f.runner, "echo", false, []string{"echo", "hi"})
 		f.runner.AddMessage(models.Message{
 			Role: models.RoleAssistant,
 			ToolCalls: []models.ToolCall{
@@ -536,14 +383,14 @@ command:
 
 func TestRunTools(t *testing.T) {
 	t.Run("no messages returns empty", func(t *testing.T) {
-		r, _, _ := newTestRunner(t)
+		r, _ := newTestRunner(t)
 		msgs, err := r.RunTools(context.Background())
 		require.NoError(t, err)
 		assert.Empty(t, msgs)
 	})
 
 	t.Run("no tool calls returns empty", func(t *testing.T) {
-		r, _, _ := newTestRunner(t)
+		r, _ := newTestRunner(t)
 		r.AddMessage(models.NewAssistantMessage("no tools here"))
 
 		msgs, err := r.RunTools(context.Background())
@@ -552,9 +399,8 @@ func TestRunTools(t *testing.T) {
 	})
 
 	t.Run("runs tool and appends result", func(t *testing.T) {
-		r, _, _ := newTestRunner(t)
-		writeTestTool(t, r, "echo", true, []string{"echo", "tool output"})
-		require.NoError(t, r.loadTools())
+		r, _ := newTestRunner(t)
+		addTestTool(t, r, "echo", true, []string{"echo", "tool output"})
 
 		r.AddMessage(models.Message{
 			Role:      models.RoleAssistant,
@@ -573,9 +419,8 @@ func TestRunTools(t *testing.T) {
 	})
 
 	t.Run("rejected tool call produces error message", func(t *testing.T) {
-		r, _, _ := newTestRunner(t)
-		writeTestTool(t, r, "echo", false, []string{"echo", "hi"})
-		require.NoError(t, r.loadTools())
+		r, _ := newTestRunner(t)
+		addTestTool(t, r, "echo", false, []string{"echo", "hi"})
 
 		r.AddMessage(models.Message{
 			Role: models.RoleAssistant,
@@ -594,16 +439,15 @@ func TestRunTools(t *testing.T) {
 
 func TestRunTool(t *testing.T) {
 	t.Run("unknown tool errors", func(t *testing.T) {
-		r, _, _ := newTestRunner(t)
+		r, _ := newTestRunner(t)
 		_, err := r.runTool(context.Background(), models.ToolCall{Function: "nope"})
 		require.Error(t, err)
-		assert.ErrorContains(t, err, "tool not defined")
+		assert.ErrorContains(t, err, "tool not found")
 	})
 
 	t.Run("untrusted without decision errors", func(t *testing.T) {
-		r, _, _ := newTestRunner(t)
-		writeTestTool(t, r, "echo", false, []string{"echo", "hi"})
-		require.NoError(t, r.loadTools())
+		r, _ := newTestRunner(t)
+		addTestTool(t, r, "echo", false, []string{"echo", "hi"})
 
 		_, err := r.runTool(context.Background(), models.ToolCall{ToolCallID: "call_1", Function: "echo", Args: "{}", Decision: models.ToolCallDecisionNoDecision})
 		require.Error(t, err)
@@ -611,9 +455,8 @@ func TestRunTool(t *testing.T) {
 	})
 
 	t.Run("untrusted rejected returns error message", func(t *testing.T) {
-		r, _, _ := newTestRunner(t)
-		writeTestTool(t, r, "echo", false, []string{"echo", "hi"})
-		require.NoError(t, r.loadTools())
+		r, _ := newTestRunner(t)
+		addTestTool(t, r, "echo", false, []string{"echo", "hi"})
 
 		msg, err := r.runTool(context.Background(), models.ToolCall{
 			ToolCallID: "call_1",
@@ -625,9 +468,8 @@ func TestRunTool(t *testing.T) {
 	})
 
 	t.Run("runs command and returns output", func(t *testing.T) {
-		r, _, _ := newTestRunner(t)
-		writeTestTool(t, r, "echo", true, []string{"echo", "hello world"})
-		require.NoError(t, r.loadTools())
+		r, _ := newTestRunner(t)
+		addTestTool(t, r, "echo", true, []string{"echo", "hello world"})
 
 		msg, err := r.runTool(context.Background(), models.ToolCall{
 			ToolCallID: "call_1",
@@ -641,25 +483,28 @@ func TestRunTool(t *testing.T) {
 	})
 
 	t.Run("interpolates args into command", func(t *testing.T) {
-		r, _, _ := newTestRunner(t)
-		content := `
-enabled: true
-trusted: true
-tool:
-  name: greet
-  parameters:
-    type: object
-    properties:
-      name:
-        type: string
-    required:
-      - name
-command:
-  - echo
-  - "hello {{.Params.name}}"
-`
-		require.NoError(t, os.WriteFile(filepath.Join(r.toolsDir, "greet.yaml"), []byte(content), 0o644))
-		require.NoError(t, r.loadTools())
+		r, _ := newTestRunner(t)
+		def := models.ToolDefinition{
+			Enabled: true,
+			Trusted: true,
+			Tool: models.Tool{
+				Name: "greet",
+				Parameters: map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"name": map[string]any{
+							"type": "string",
+						},
+					},
+					"required": []string{"name"},
+				},
+			},
+			Command: []string{"echo", "hello {{.Params.name}}"},
+		}
+
+		p, ok := r.toolsProvider.(*toolsprovider.MemoryProvider)
+		assert.True(t, ok)
+		p.AddDefinition(def)
 
 		msg, err := r.runTool(context.Background(), models.ToolCall{
 			ToolCallID: "call_1",
@@ -671,25 +516,28 @@ command:
 	})
 
 	t.Run("invalid args against schema errors", func(t *testing.T) {
-		r, _, _ := newTestRunner(t)
-		content := `
-enabled: true
-trusted: true
-tool:
-  name: strict
-  parameters:
-    type: object
-    properties:
-      name:
-        type: string
-    required:
-      - name
-command:
-  - echo
-  - "{{.Params.name}}"
-`
-		require.NoError(t, os.WriteFile(filepath.Join(r.toolsDir, "strict.yaml"), []byte(content), 0o644))
-		require.NoError(t, r.loadTools())
+		r, _ := newTestRunner(t)
+		def := models.ToolDefinition{
+			Enabled: true,
+			Trusted: true,
+			Tool: models.Tool{
+				Name: "greet",
+				Parameters: map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"name": map[string]any{
+							"type": "string",
+						},
+					},
+					"required": []string{"name"},
+				},
+			},
+			Command: []string{"echo", "hello {{.Params.name}}"},
+		}
+
+		p, ok := r.toolsProvider.(*toolsprovider.MemoryProvider)
+		assert.True(t, ok)
+		p.AddDefinition(def)
 
 		_, err := r.runTool(context.Background(), models.ToolCall{
 			ToolCallID: "call_1",
@@ -698,15 +546,4 @@ command:
 		})
 		require.Error(t, err)
 	})
-}
-
-func TestTools(t *testing.T) {
-	r, _, _ := newTestRunner(t)
-	writeTestTool(t, r, "tool-a", true, []string{"echo", "a"})
-	writeTestTool(t, r, "tool-b", false, []string{"echo", "b"})
-	require.NoError(t, r.loadTools())
-
-	tools := r.tools()
-	require.Len(t, tools, 2)
-	assert.ElementsMatch(t, []string{"tool-a", "tool-b"}, tools.List())
 }

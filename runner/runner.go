@@ -5,9 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -16,7 +14,7 @@ import (
 	"github.com/c00/harnesser/models"
 	"github.com/c00/harnesser/promptsprovider"
 	"github.com/c00/harnesser/tools"
-	"go.yaml.in/yaml/v4"
+	"github.com/c00/harnesser/toolsprovider"
 )
 
 const (
@@ -51,36 +49,21 @@ type Runner struct {
 	llm             llm.LlmProvider
 	promptsProvider promptsprovider.PromptsReader
 	histProv        historyprovider.HistoryProvider
-	toolsDir        string
+	toolsProvider   toolsprovider.ToolsProvider
 
 	messages models.Messages
-	toolDefs map[string]models.ToolDefinition
 }
 
-func NewRunner(llm llm.LlmProvider, promptsProvider promptsprovider.PromptsReader, histProv historyprovider.HistoryProvider, toolsDir string, name string) (*Runner, error) {
+func NewRunner(llm llm.LlmProvider, promptsProvider promptsprovider.PromptsReader, histProv historyprovider.HistoryProvider, toolsProvider toolsprovider.ToolsProvider, name string) *Runner {
 	runner := Runner{
 		llm:             llm,
 		promptsProvider: promptsProvider,
 		histProv:        histProv,
-		toolsDir:        toolsDir,
+		toolsProvider:   toolsProvider,
 		messages:        models.Messages{},
-		toolDefs:        map[string]models.ToolDefinition{},
 	}
 
-	err := errors.Join(
-		runner.ensureDir(runner.toolsDir),
-	)
-
-	if err != nil {
-		return nil, fmt.Errorf("cannot create dirs: %w", err)
-	}
-
-	err = runner.loadTools()
-	if err != nil {
-		return nil, fmt.Errorf("cannot load tools: %w", err)
-	}
-
-	return &runner, nil
+	return &runner
 }
 
 // ConfirmToolCall lets the user approve or reject a tool call
@@ -103,57 +86,6 @@ func (r *Runner) ConfirmToolCall(ctx context.Context, toolCallID string, decisio
 			}
 			return nil
 		}
-	}
-
-	return nil
-}
-
-func (r *Runner) tools() models.Tools {
-	tools := models.Tools{}
-	for _, t := range r.toolDefs {
-		tools = append(tools, t.Tool)
-	}
-
-	return tools
-}
-
-func (r *Runner) ensureDir(dir string) error {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("cannot create directory '%v': %w", dir, err)
-	}
-	return nil
-}
-
-// Load the tools from the toolDir.
-func (r *Runner) loadTools() error {
-	r.toolDefs = map[string]models.ToolDefinition{}
-
-	entries, err := os.ReadDir(r.toolsDir)
-	if err != nil {
-		return fmt.Errorf("cannot read tools dir: %w", err)
-	}
-
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-
-		ext := strings.ToLower(filepath.Ext(entry.Name()))
-		if ext != ".yaml" && ext != ".yml" {
-			continue
-		}
-
-		path := filepath.Join(r.toolsDir, entry.Name())
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return fmt.Errorf("cannot read tool %q: %w", path, err)
-		}
-
-		var toolDef models.ToolDefinition
-		if err := yaml.Unmarshal(data, &toolDef); err != nil {
-			return fmt.Errorf("cannot parse tool %q: %w", path, err)
-		}
-		r.toolDefs[toolDef.Tool.Name] = toolDef
 	}
 
 	return nil
@@ -204,12 +136,12 @@ func (r *Runner) runInference(ctx context.Context, cb llm.StreamDeltaFunc) (mode
 	var resp models.Message
 
 	if shouldStream {
-		resp, err = streamingProvider.GenerateStream(ctx, allMsgs, r.tools(), cb)
+		resp, err = streamingProvider.GenerateStream(ctx, allMsgs, r.toolsProvider.GetTools(), cb)
 		if err != nil {
 			return models.Message{}, fmt.Errorf("cannot generate llm response: %w", err)
 		}
 	} else {
-		resp, err = r.llm.Generate(ctx, allMsgs, r.tools())
+		resp, err = r.llm.Generate(ctx, allMsgs, r.toolsProvider.GetTools())
 		if err != nil {
 			return models.Message{}, fmt.Errorf("cannot generate llm response: %w", err)
 		}
@@ -272,8 +204,9 @@ func (r *Runner) runStep(ctx context.Context, cb llm.StreamDeltaFunc) (Response,
 		notApprovedYet := []PendingToolcall{}
 
 		for _, tc := range lastMsg.ToolCalls {
-			td, ok := r.toolDefs[tc.Function]
-			if !ok {
+			td, err := r.toolsProvider.GetDefinition(tc.Function)
+			if err != nil {
+				slog.Warn("cannot get tool definition, skipping", "error", err.Error(), "function", tc.Function)
 				continue
 			}
 
@@ -349,9 +282,9 @@ func (r *Runner) RunTools(ctx context.Context) (models.Messages, error) {
 
 func (r *Runner) runTool(ctx context.Context, tc models.ToolCall) (models.Message, error) {
 	// Find the tool
-	td, ok := r.toolDefs[tc.Function]
-	if !ok {
-		return models.Message{}, fmt.Errorf("tool not defined: %v", tc.Function)
+	td, err := r.toolsProvider.GetDefinition(tc.Function)
+	if err != nil {
+		return models.Message{}, fmt.Errorf("cannot get tool def for %q: %w", tc.Function, err)
 	}
 
 	// Can we run this tool?
@@ -413,9 +346,9 @@ func (r *Runner) Messages() models.Messages {
 
 // ToolCallCommand returns the command that will be executed for a tool call.
 func (r *Runner) ToolCallCommand(tc models.ToolCall) (string, error) {
-	td, ok := r.toolDefs[tc.Function]
-	if !ok {
-		return "", fmt.Errorf("tool definition not found for %q", tc.Function)
+	td, err := r.toolsProvider.GetDefinition(tc.Function)
+	if err != nil {
+		return "", fmt.Errorf("cannot get tool def for %q: %w", tc.Function, err)
 	}
 
 	builder, err := tools.NewToolCallBuilder(tc, td)

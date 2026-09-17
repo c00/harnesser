@@ -1,8 +1,6 @@
 package startcmd
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -12,14 +10,13 @@ import (
 	"github.com/c00/harnesser/models"
 	"github.com/c00/harnesser/promptsprovider"
 	"github.com/c00/harnesser/runner"
+	"github.com/c00/harnesser/toolsprovider"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestViewportHeightTracksTextareaHeight(t *testing.T) {
-	agent, err := runner.NewRunner(nil, promptsprovider.NewMemoryProvider(), historyprovider.NewMemoryProvider(), filepath.Join(t.TempDir(), "tools"), "")
-	require.NoError(t, err)
+	agent := runner.NewRunner(nil, promptsprovider.NewMemoryProvider(), historyprovider.NewMemoryProvider(), toolsprovider.NewMemoryProvider(), "")
 	model := initialModel(t.Context(), agent, false, func(m tea.Msg) {})
 	model.state = ready
 	model.textarea.Focus()
@@ -56,9 +53,7 @@ func TestInitialModelStartupState(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			agent, err := runner.NewRunner(nil, promptsprovider.NewMemoryProvider(), historyprovider.NewMemoryProvider(), filepath.Join(t.TempDir(), "tools"), "")
-			require.NoError(t, err)
-
+			agent := runner.NewRunner(nil, promptsprovider.NewMemoryProvider(), historyprovider.NewMemoryProvider(), toolsprovider.NewMemoryProvider(), "")
 			model := initialModel(t.Context(), agent, tt.runOnStart, func(m tea.Msg) {})
 
 			assert.Equal(t, tt.wantState, model.state)
@@ -69,8 +64,7 @@ func TestInitialModelStartupState(t *testing.T) {
 }
 
 func TestInitialModelRendersLoadedHistory(t *testing.T) {
-	agent, err := runner.NewRunner(nil, promptsprovider.NewMemoryProvider(), historyprovider.NewMemoryProvider(), filepath.Join(t.TempDir(), "tools"), "")
-	require.NoError(t, err)
+	agent := runner.NewRunner(nil, promptsprovider.NewMemoryProvider(), historyprovider.NewMemoryProvider(), toolsprovider.NewMemoryProvider(), "")
 	agent.AddMessage(models.NewUserTextMessage("previous question"))
 	agent.AddMessage(models.NewAssistantMessage("previous answer"))
 	model := initialModel(t.Context(), agent, false, func(m tea.Msg) {})
@@ -84,8 +78,7 @@ func TestInitialModelRendersLoadedHistory(t *testing.T) {
 }
 
 func TestViewportHeightReservesPermissionPrompt(t *testing.T) {
-	agent, err := runner.NewRunner(nil, promptsprovider.NewMemoryProvider(), historyprovider.NewMemoryProvider(), filepath.Join(t.TempDir(), "tools"), "")
-	require.NoError(t, err)
+	agent := runner.NewRunner(nil, promptsprovider.NewMemoryProvider(), historyprovider.NewMemoryProvider(), toolsprovider.NewMemoryProvider(), "")
 	model := initialModel(t.Context(), agent, false, func(m tea.Msg) {})
 	model.state = askPermission
 	model.permission = &permissionModel{
@@ -107,19 +100,15 @@ func TestViewportHeightReservesPermissionPrompt(t *testing.T) {
 }
 
 func TestRenderMessages(t *testing.T) {
-	dir := t.TempDir()
-	toolsDir := filepath.Join(dir, "tools")
-	require.NoError(t, os.MkdirAll(toolsDir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(toolsDir, "print.yaml"), []byte(`
-tool:
-  name: print
-command:
-  - printf
-  - '{{.Params.path}}'
-`), 0o644))
+	tools := toolsprovider.NewMemoryProvider()
+	tools.AddDefinition(models.ToolDefinition{
+		Tool: models.Tool{
+			Name: "print",
+		},
+		Command: []string{"printf", "{{.Params.path}}"},
+	})
 
-	agent, err := runner.NewRunner(nil, promptsprovider.NewMemoryProvider(), historyprovider.NewMemoryProvider(), toolsDir, "")
-	require.NoError(t, err)
+	agent := runner.NewRunner(nil, promptsprovider.NewMemoryProvider(), historyprovider.NewMemoryProvider(), tools, "")
 	agent.AddMessage(models.NewUserTextMessage("first"))
 	agent.AddMessage(models.NewUserTextMessage("second"))
 	agent.AddMessage(models.Message{
@@ -155,8 +144,7 @@ command:
 }
 
 func TestRenderMessagesTruncatesToolResults(t *testing.T) {
-	agent, err := runner.NewRunner(nil, promptsprovider.NewMemoryProvider(), historyprovider.NewMemoryProvider(), filepath.Join(t.TempDir(), "tools"), "")
-	require.NoError(t, err)
+	agent := runner.NewRunner(nil, promptsprovider.NewMemoryProvider(), historyprovider.NewMemoryProvider(), toolsprovider.NewMemoryProvider(), "")
 	agent.AddMessage(models.NewToolResultMessage("call_1", strings.Repeat("界", 201)))
 
 	model := initialModel(t.Context(), agent, false, func(m tea.Msg) {})
