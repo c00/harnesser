@@ -9,6 +9,7 @@ import (
 	"github.com/c00/harnesser/config"
 	"github.com/c00/harnesser/llm/openrouter"
 	"github.com/c00/harnesser/models"
+	"github.com/c00/harnesser/promptsprovider"
 	"github.com/c00/harnesser/runner"
 	"github.com/c00/harnesser/secrets"
 	"github.com/spf13/cobra"
@@ -63,7 +64,12 @@ func run(cmd *cobra.Command, args []string) error {
 		fmt.Println("loaded last file", historyFile)
 	}
 
-	agent, err := runner.NewRunner(provider, promptsDir, historyDir, toolsDir, historyFile)
+	prompts, err := promptsprovider.NewFileProvider(promptsDir)
+	if err != nil {
+		return fmt.Errorf("cannot create prompts provider: %w", err)
+	}
+
+	agent, err := runner.NewRunner(provider, prompts, historyDir, toolsDir, historyFile)
 	if err != nil {
 		return fmt.Errorf("cannot create runner: %w", err)
 	}

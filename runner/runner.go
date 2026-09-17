@@ -13,6 +13,7 @@ import (
 
 	"github.com/c00/harnesser/llm"
 	"github.com/c00/harnesser/models"
+	"github.com/c00/harnesser/promptsprovider"
 	"github.com/c00/harnesser/tools"
 	"go.yaml.in/yaml/v4"
 )
@@ -46,10 +47,10 @@ type PendingToolcall struct {
 }
 
 type Runner struct {
-	llm        llm.LlmProvider
-	promptsDir string
-	historyDir string
-	toolsDir   string
+	llm             llm.LlmProvider
+	promptsProvider promptsprovider.PromptsReader
+	historyDir      string
+	toolsDir        string
 
 	// points to the file in the history dir
 	// if unset, will generate a name
@@ -57,30 +58,28 @@ type Runner struct {
 	// if new, will create
 	name string
 
-	prompts  models.Messages
 	messages models.Messages
 	toolDefs map[string]models.ToolDefinition
 }
 
-func NewRunner(llm llm.LlmProvider, promptsDir, histDir, toolsDir string, name string) (*Runner, error) {
+func NewRunner(llm llm.LlmProvider, promptsProvider promptsprovider.PromptsReader, histDir, toolsDir string, name string) (*Runner, error) {
 	if name == "" {
 		name = fmt.Sprintf("%v.yaml", time.Now().Format(time.RFC3339))
 	}
 
 	runner := Runner{
-		llm:        llm,
-		promptsDir: promptsDir,
-		historyDir: histDir,
-		toolsDir:   toolsDir,
-		name:       name,
-		messages:   models.Messages{},
-		toolDefs:   map[string]models.ToolDefinition{},
+		llm:             llm,
+		promptsProvider: promptsProvider,
+		historyDir:      histDir,
+		toolsDir:        toolsDir,
+		name:            name,
+		messages:        models.Messages{},
+		toolDefs:        map[string]models.ToolDefinition{},
 	}
 
 	err := errors.Join(
 		runner.ensureDir(runner.toolsDir),
 		runner.ensureDir(runner.historyDir),
-		runner.ensureDir(runner.promptsDir),
 	)
 
 	if err != nil {
@@ -90,11 +89,6 @@ func NewRunner(llm llm.LlmProvider, promptsDir, histDir, toolsDir string, name s
 	err = runner.loadTools()
 	if err != nil {
 		return nil, fmt.Errorf("cannot load tools: %w", err)
-	}
-
-	err = runner.loadPrompts()
-	if err != nil {
-		return nil, fmt.Errorf("cannot load prompts: %w", err)
 	}
 
 	return &runner, nil
@@ -171,35 +165,6 @@ func (r *Runner) loadTools() error {
 			return fmt.Errorf("cannot parse tool %q: %w", path, err)
 		}
 		r.toolDefs[toolDef.Tool.Name] = toolDef
-	}
-
-	return nil
-}
-
-func (r *Runner) loadPrompts() error {
-	r.prompts = models.Messages{}
-
-	entries, err := os.ReadDir(r.promptsDir)
-	if err != nil {
-		return err
-	}
-
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-
-		ext := strings.ToLower(filepath.Ext(entry.Name()))
-		if ext != ".md" && ext != ".txt" {
-			continue
-		}
-
-		path := filepath.Join(r.promptsDir, entry.Name())
-		prompt, err := os.ReadFile(path)
-		if err != nil {
-			return fmt.Errorf("cannot read prompt %q: %w", path, err)
-		}
-		r.prompts = append(r.prompts, models.NewSystemMessage(string(prompt)))
 	}
 
 	return nil
@@ -285,8 +250,7 @@ func (r *Runner) RunPrompt(ctx context.Context, msg models.Message) (models.Mess
 
 // runInference runs inference to the LLM Provider. If callback is set, runs streaming.
 func (r *Runner) runInference(ctx context.Context, cb llm.StreamDeltaFunc) (models.Message, error) {
-	allMsgs := make([]models.Message, len(r.prompts))
-	copy(allMsgs, r.prompts)
+	allMsgs := append(models.Messages{}, r.promptsProvider.Prompts().ActiveMessages()...)
 	allMsgs = append(allMsgs, r.messages...)
 
 	shouldStream := true

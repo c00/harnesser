@@ -8,9 +8,16 @@ import (
 
 	"github.com/c00/harnesser/llm/mockllm"
 	"github.com/c00/harnesser/models"
+	"github.com/c00/harnesser/promptsprovider"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func newMockPromptProvider() *promptsprovider.MemoryProvider {
+	p := &promptsprovider.MemoryProvider{}
+	p.AddPrompt(promptsprovider.NewPrompt("foo", "You are a helpful assistant"))
+	return p
+}
 
 // newTestRunner creates a Runner with empty dirs and a mock LLM.
 func newTestRunner(t *testing.T) (*Runner, *mockllm.MockLLM, string) {
@@ -21,7 +28,7 @@ func newTestRunner(t *testing.T) (*Runner, *mockllm.MockLLM, string) {
 
 	r, err := NewRunner(
 		llm,
-		filepath.Join(dir, "prompts"),
+		newMockPromptProvider(),
 		filepath.Join(dir, "history"),
 		filepath.Join(dir, "tools"),
 		"",
@@ -62,14 +69,13 @@ func TestNewRunner(t *testing.T) {
 	t.Run("creates dirs and generates name", func(t *testing.T) {
 		dir := t.TempDir()
 		r, err := NewRunner(mockllm.New(),
-			filepath.Join(dir, "prompts"),
+			newMockPromptProvider(),
 			filepath.Join(dir, "history"),
 			filepath.Join(dir, "tools"),
 			"",
 		)
 		require.NoError(t, err)
 
-		assert.DirExists(t, r.promptsDir)
 		assert.DirExists(t, r.historyDir)
 		assert.DirExists(t, r.toolsDir)
 		assert.NotEmpty(t, r.name)
@@ -80,7 +86,7 @@ func TestNewRunner(t *testing.T) {
 	t.Run("uses provided name", func(t *testing.T) {
 		dir := t.TempDir()
 		r, err := NewRunner(mockllm.New(),
-			filepath.Join(dir, "prompts"),
+			newMockPromptProvider(),
 			filepath.Join(dir, "history"),
 			filepath.Join(dir, "tools"),
 			"my-session.yaml",
@@ -89,15 +95,12 @@ func TestNewRunner(t *testing.T) {
 		assert.Equal(t, "my-session.yaml", r.name)
 	})
 
-	t.Run("loads tools and prompts", func(t *testing.T) {
+	t.Run("loads tools", func(t *testing.T) {
 		dir := t.TempDir()
-		promptsDir := filepath.Join(dir, "prompts")
 		toolsDir := filepath.Join(dir, "tools")
 		histDir := filepath.Join(dir, "history")
 
-		require.NoError(t, os.MkdirAll(promptsDir, 0o755))
 		require.NoError(t, os.MkdirAll(toolsDir, 0o755))
-		require.NoError(t, os.WriteFile(filepath.Join(promptsDir, "system.md"), []byte("you are a test"), 0o644))
 		require.NoError(t, os.WriteFile(filepath.Join(toolsDir, "echo.yaml"), []byte(`
 enabled: true
 trusted: true
@@ -108,11 +111,9 @@ command:
   - hello
 `), 0o644))
 
-		r, err := NewRunner(mockllm.New(), promptsDir, histDir, toolsDir, "")
+		r, err := NewRunner(mockllm.New(), newMockPromptProvider(), histDir, toolsDir, "")
 		require.NoError(t, err)
 
-		require.Len(t, r.prompts, 1)
-		assert.Equal(t, "you are a test", r.prompts[0].Content.String())
 		require.Contains(t, r.toolDefs, "echo")
 		assert.True(t, r.toolDefs["echo"].Trusted)
 	})
@@ -123,7 +124,7 @@ command:
 		require.NoError(t, os.MkdirAll(toolsDir, 0o755))
 		require.NoError(t, os.WriteFile(filepath.Join(toolsDir, "bad.yaml"), []byte(":\n  - not: [valid"), 0o644))
 
-		_, err := NewRunner(mockllm.New(), filepath.Join(dir, "prompts"), filepath.Join(dir, "history"), toolsDir, "")
+		_, err := NewRunner(mockllm.New(), newMockPromptProvider(), filepath.Join(dir, "history"), toolsDir, "")
 		require.Error(t, err)
 		assert.ErrorContains(t, err, "cannot load tools")
 	})
@@ -192,28 +193,6 @@ command:
 		r, _, _ := newTestRunner(t)
 		require.NoError(t, os.WriteFile(filepath.Join(r.toolsDir, "bad.yaml"), []byte(":\n  - not: [valid"), 0o644))
 		assert.Error(t, r.loadTools())
-	})
-}
-
-func TestLoadPrompts(t *testing.T) {
-	t.Run("loads md and txt, skips others and dirs", func(t *testing.T) {
-		r, _, _ := newTestRunner(t)
-		require.NoError(t, os.WriteFile(filepath.Join(r.promptsDir, "a.md"), []byte("prompt a"), 0o644))
-		require.NoError(t, os.WriteFile(filepath.Join(r.promptsDir, "b.txt"), []byte("prompt b"), 0o644))
-		require.NoError(t, os.WriteFile(filepath.Join(r.promptsDir, "c.yaml"), []byte("nope"), 0o644))
-		require.NoError(t, os.Mkdir(filepath.Join(r.promptsDir, "subdir"), 0o755))
-
-		require.NoError(t, r.loadPrompts())
-
-		require.Len(t, r.prompts, 2)
-		assert.Equal(t, models.RoleSystem, r.prompts[0].Role)
-		texts := []string{r.prompts[0].Content.String(), r.prompts[1].Content.String()}
-		assert.ElementsMatch(t, []string{"prompt a", "prompt b"}, texts)
-	})
-
-	t.Run("fails on unreadable dir", func(t *testing.T) {
-		r := &Runner{promptsDir: filepath.Join(t.TempDir(), "does-not-exist")}
-		assert.Error(t, r.loadPrompts())
 	})
 }
 
@@ -425,28 +404,32 @@ func TestRunInference(t *testing.T) {
 	})
 
 	t.Run("sends prompts plus messages to the llm", func(t *testing.T) {
-		r, llm, _ := newTestRunner(t)
-		require.NoError(t, os.WriteFile(filepath.Join(r.promptsDir, "system.md"), []byte("system prompt"), 0o644))
-		require.NoError(t, r.loadPrompts())
+		r, _, _ := newTestRunner(t)
+		provider := &promptsprovider.MemoryProvider{}
+		provider.AddPrompt(promptsprovider.NewPrompt("system", "system prompt"))
+		provider.AddPrompt(promptsprovider.Prompt{
+			Active:  false,
+			Key:     "inactive",
+			Message: models.NewSystemMessage("inactive prompt"),
+		})
+		r.promptsProvider = provider
 
-		var gotMsgs []models.Message
-		var gotTools models.Tools
-		// Use a phrase that only matches when the system prompt is included
-		llm.AddTextResponse("system prompt", "ok")
-
-		r.AddMessage(models.NewUserTextMessage("user msg"))
-		_, err := r.RunInference(context.Background())
-		require.NoError(t, err)
-
-		// Re-run with a capture via tools check: the mock matched the system prompt,
-		// which proves prompts were sent. Also verify tools are passed through.
+		llm := &capturingLLM{}
+		r.llm = llm
 		writeTestTool(t, r, "echo", true, []string{"echo", "hi"})
 		require.NoError(t, r.loadTools())
-		gotTools = r.tools()
-		require.Len(t, gotTools, 1)
-		assert.Equal(t, "echo", gotTools[0].Name)
 
-		_ = gotMsgs
+		r.AddMessage(models.NewUserTextMessage("user msg"))
+		_, err := r.RunInference(t.Context())
+		require.NoError(t, err)
+
+		require.Len(t, llm.messages, 2)
+		assert.Equal(t, models.RoleSystem, llm.messages[0].Role)
+		assert.Equal(t, "system prompt", llm.messages[0].Content.String())
+		assert.Equal(t, models.RoleUser, llm.messages[1].Role)
+		assert.Equal(t, "user msg", llm.messages[1].Content.String())
+		require.Len(t, llm.tools, 1)
+		assert.Equal(t, "echo", llm.tools[0].Name)
 	})
 
 	t.Run("writes history", func(t *testing.T) {
@@ -482,6 +465,18 @@ type failingLLM struct{}
 func (f *failingLLM) Config() models.LlmConfig { return models.LlmConfig{Name: "failing"} }
 func (f *failingLLM) Generate(ctx context.Context, messages []models.Message, tools []models.Tool) (models.Message, error) {
 	return models.Message{}, assert.AnError
+}
+
+type capturingLLM struct {
+	messages models.Messages
+	tools    models.Tools
+}
+
+func (c *capturingLLM) Config() models.LlmConfig { return models.LlmConfig{Name: "capturing"} }
+func (c *capturingLLM) Generate(_ context.Context, messages []models.Message, tools []models.Tool) (models.Message, error) {
+	c.messages = append(models.Messages{}, messages...)
+	c.tools = append(models.Tools{}, tools...)
+	return models.NewAssistantMessage("ok"), nil
 }
 
 func TestRunStep(t *testing.T) {

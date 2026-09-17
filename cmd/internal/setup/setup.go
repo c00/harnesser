@@ -11,6 +11,7 @@ import (
 	"github.com/c00/harnesser/config"
 	"github.com/c00/harnesser/landlock"
 	"github.com/c00/harnesser/llm/openrouter"
+	"github.com/c00/harnesser/promptsprovider"
 	"github.com/c00/harnesser/runner"
 	"github.com/c00/harnesser/secrets"
 	"github.com/spf13/cobra"
@@ -51,7 +52,12 @@ func Setup(cmd *cobra.Command) (*runner.Runner, error) {
 		historyFile = lastHistoryFile
 	}
 
-	agent, err := runner.NewRunner(provider, promptsDir, historyDir, toolsDir, historyFile)
+	prompts, err := promptsprovider.NewFileProvider(promptsDir)
+	if err != nil {
+		return nil, fmt.Errorf("cannot create prompts provider: %w", err)
+	}
+
+	agent, err := runner.NewRunner(provider, prompts, historyDir, toolsDir, historyFile)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create runner: %w", err)
 	}
