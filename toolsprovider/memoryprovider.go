@@ -44,7 +44,7 @@ func (p *MemoryProvider) GetDefinition(name string) (models.ToolDefinition, erro
 }
 
 func (p *MemoryProvider) SetDefinitions(def []models.ToolDefinition) {
-	p.toolDefs = p.toolDefs
+	p.toolDefs = def
 }
 
 func (p *MemoryProvider) AddDefinition(def models.ToolDefinition) {
