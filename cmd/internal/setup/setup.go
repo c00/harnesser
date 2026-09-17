@@ -73,7 +73,7 @@ func Setup(cmd *cobra.Command) (*runner.Runner, error) {
 		return nil, fmt.Errorf("cannot create tools provider: %w", err)
 	}
 
-	agent := runner.NewRunner(provider, prompts, history, tools, historyFile)
+	agent := runner.NewRunner(provider, prompts, history, tools)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create runner: %w", err)
 	}

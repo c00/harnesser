@@ -54,7 +54,7 @@ type Runner struct {
 	messages models.Messages
 }
 
-func NewRunner(llm llm.LlmProvider, promptsProvider promptsprovider.PromptsReader, histProv historyprovider.HistoryProvider, toolsProvider toolsprovider.ToolsProvider, name string) *Runner {
+func NewRunner(llm llm.LlmProvider, promptsProvider promptsprovider.PromptsReader, histProv historyprovider.HistoryProvider, toolsProvider toolsprovider.ToolsProvider) *Runner {
 	runner := Runner{
 		llm:             llm,
 		promptsProvider: promptsProvider,

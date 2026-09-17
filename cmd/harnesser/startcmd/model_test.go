@@ -16,7 +16,7 @@ import (
 )
 
 func TestViewportHeightTracksTextareaHeight(t *testing.T) {
-	agent := runner.NewRunner(nil, promptsprovider.NewMemoryProvider(), historyprovider.NewMemoryProvider(), toolsprovider.NewMemoryProvider(), "")
+	agent := runner.NewRunner(nil, promptsprovider.NewMemoryProvider(), historyprovider.NewMemoryProvider(), toolsprovider.NewMemoryProvider())
 	model := initialModel(t.Context(), agent, false, func(m tea.Msg) {})
 	model.state = ready
 	model.textarea.Focus()
@@ -53,7 +53,7 @@ func TestInitialModelStartupState(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			agent := runner.NewRunner(nil, promptsprovider.NewMemoryProvider(), historyprovider.NewMemoryProvider(), toolsprovider.NewMemoryProvider(), "")
+			agent := runner.NewRunner(nil, promptsprovider.NewMemoryProvider(), historyprovider.NewMemoryProvider(), toolsprovider.NewMemoryProvider())
 			model := initialModel(t.Context(), agent, tt.runOnStart, func(m tea.Msg) {})
 
 			assert.Equal(t, tt.wantState, model.state)
@@ -64,7 +64,7 @@ func TestInitialModelStartupState(t *testing.T) {
 }
 
 func TestInitialModelRendersLoadedHistory(t *testing.T) {
-	agent := runner.NewRunner(nil, promptsprovider.NewMemoryProvider(), historyprovider.NewMemoryProvider(), toolsprovider.NewMemoryProvider(), "")
+	agent := runner.NewRunner(nil, promptsprovider.NewMemoryProvider(), historyprovider.NewMemoryProvider(), toolsprovider.NewMemoryProvider())
 	agent.AddMessage(models.NewUserTextMessage("previous question"))
 	agent.AddMessage(models.NewAssistantMessage("previous answer"))
 	model := initialModel(t.Context(), agent, false, func(m tea.Msg) {})
@@ -78,7 +78,7 @@ func TestInitialModelRendersLoadedHistory(t *testing.T) {
 }
 
 func TestViewportHeightReservesPermissionPrompt(t *testing.T) {
-	agent := runner.NewRunner(nil, promptsprovider.NewMemoryProvider(), historyprovider.NewMemoryProvider(), toolsprovider.NewMemoryProvider(), "")
+	agent := runner.NewRunner(nil, promptsprovider.NewMemoryProvider(), historyprovider.NewMemoryProvider(), toolsprovider.NewMemoryProvider())
 	model := initialModel(t.Context(), agent, false, func(m tea.Msg) {})
 	model.state = askPermission
 	model.permission = &permissionModel{
@@ -108,7 +108,7 @@ func TestRenderMessages(t *testing.T) {
 		Command: []string{"printf", "{{.Params.path}}"},
 	})
 
-	agent := runner.NewRunner(nil, promptsprovider.NewMemoryProvider(), historyprovider.NewMemoryProvider(), tools, "")
+	agent := runner.NewRunner(nil, promptsprovider.NewMemoryProvider(), historyprovider.NewMemoryProvider(), tools)
 	agent.AddMessage(models.NewUserTextMessage("first"))
 	agent.AddMessage(models.NewUserTextMessage("second"))
 	agent.AddMessage(models.Message{
@@ -144,7 +144,7 @@ func TestRenderMessages(t *testing.T) {
 }
 
 func TestRenderMessagesTruncatesToolResults(t *testing.T) {
-	agent := runner.NewRunner(nil, promptsprovider.NewMemoryProvider(), historyprovider.NewMemoryProvider(), toolsprovider.NewMemoryProvider(), "")
+	agent := runner.NewRunner(nil, promptsprovider.NewMemoryProvider(), historyprovider.NewMemoryProvider(), toolsprovider.NewMemoryProvider())
 	agent.AddMessage(models.NewToolResultMessage("call_1", strings.Repeat("界", 201)))
 
 	model := initialModel(t.Context(), agent, false, func(m tea.Msg) {})

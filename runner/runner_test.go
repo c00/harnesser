@@ -34,7 +34,6 @@ func newTestRunner(t *testing.T) (*Runner, *mockllm.MockLLM) {
 		newMockPromptProvider(),
 		newHistProvider(),
 		toolsprovider.NewMemoryProvider(),
-		"",
 	)
 
 	return r, llm
