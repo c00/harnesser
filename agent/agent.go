@@ -63,6 +63,8 @@ func NewAgent(llm llm.LlmProvider, promptsProvider systemprompts.PromptsReader, 
 		messages:        types.Messages{},
 	}
 
+	runner.LoadHistory()
+
 	return &runner
 }
 
