@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/c00/harnesser/cmd/internal/setup"
-	"github.com/c00/harnesser/models"
+	"github.com/c00/harnesser/types"
 	"github.com/spf13/cobra"
 )
 
@@ -35,11 +35,11 @@ func run(cmd *cobra.Command, args []string) error {
 		functionArgs = args[1]
 	}
 
-	msg := models.Message{
+	msg := types.Message{
 		CreatedAt: time.Now(),
-		Role:      models.RoleAssistant,
-		ToolCalls: []models.ToolCall{
-			{ToolCallID: "tool_00001", Function: function, Args: functionArgs, Decision: models.ToolCallDecisionApprove},
+		Role:      types.RoleAssistant,
+		ToolCalls: []types.ToolCall{
+			{ToolCallID: "tool_00001", Function: function, Args: functionArgs, Decision: types.ToolCallDecisionApprove},
 		},
 	}
 	agent.AddMessage(msg)

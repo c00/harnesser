@@ -5,16 +5,16 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/c00/harnesser/models"
+	"github.com/c00/harnesser/types"
 	"go.yaml.in/yaml/v4"
 )
 
-var standardTools = []models.ToolDefinition{
+var standardTools = []types.ToolDefinition{
 	{
 		Enabled:    true,
 		Trusted:    true,
 		AllowedEnv: []string{"FIRECRAWL_API_KEY"},
-		Tool: models.Tool{
+		Tool: types.Tool{
 			Name:        "firecrawl_scrape",
 			Description: "Scrape a url and return it as markdown. The url is required.",
 			Parameters: objectParameters(map[string]any{
@@ -38,7 +38,7 @@ var standardTools = []models.ToolDefinition{
 		Enabled:    true,
 		Trusted:    true,
 		AllowedEnv: []string{"FIRECRAWL_API_KEY"},
-		Tool: models.Tool{
+		Tool: types.Tool{
 			Name:        "firecrawl_search",
 			Description: "Search the web. Query is required.",
 			Parameters: objectParameters(map[string]any{
@@ -61,7 +61,7 @@ var standardTools = []models.ToolDefinition{
 	{
 		Enabled: true,
 		Trusted: true,
-		Tool: models.Tool{
+		Tool: types.Tool{
 			Name:        "current_time",
 			Description: "Gets the current date and time. Useful for when the response needs to be time-aware.",
 			Parameters:  map[string]any{},
@@ -120,7 +120,7 @@ var standardTools = []models.ToolDefinition{
 	{
 		Enabled: true,
 		Trusted: true,
-		Tool: models.Tool{
+		Tool: types.Tool{
 			Name:        "read_file",
 			Description: "Read a file from disk. You can limit the range to a number of lines and bytes.",
 			Parameters: objectParameters(map[string]any{
@@ -145,7 +145,7 @@ var standardTools = []models.ToolDefinition{
 	{
 		Enabled: true,
 		Trusted: false,
-		Tool: models.Tool{
+		Tool: types.Tool{
 			Name:        "replace_text",
 			Description: "Replace literal text in a file if the number of matches is as expected.",
 			Parameters: objectParameters(map[string]any{
@@ -182,7 +182,7 @@ var standardTools = []models.ToolDefinition{
 	{
 		Enabled: true,
 		Trusted: false,
-		Tool: models.Tool{
+		Tool: types.Tool{
 			Name:        "shell_command",
 			Description: "Run arbitrary shell command. Use only when other tools cannot achieve the same result.",
 			Parameters: objectParameters(map[string]any{
@@ -195,7 +195,7 @@ var standardTools = []models.ToolDefinition{
 	{
 		Enabled: true,
 		Trusted: true,
-		Tool: models.Tool{
+		Tool: types.Tool{
 			Name:        "write_file",
 			Description: "Write to a file If the file does not exist, it will be created. If it does exist, it will be truncated and overwritten. If the append flag is used, new content will be appended to the file.",
 			Parameters: objectParameters(map[string]any{
@@ -215,7 +215,7 @@ var standardTools = []models.ToolDefinition{
 	},
 }
 
-func GetStandardTools() []models.ToolDefinition {
+func GetStandardTools() []types.ToolDefinition {
 	return standardTools
 }
 
@@ -239,11 +239,11 @@ func WriteStandardTools(path string) error {
 	return nil
 }
 
-func commandTool(name, description, argsDescription string, trusted bool, command ...string) models.ToolDefinition {
-	return models.ToolDefinition{
+func commandTool(name, description, argsDescription string, trusted bool, command ...string) types.ToolDefinition {
+	return types.ToolDefinition{
 		Enabled: true,
 		Trusted: trusted,
-		Tool: models.Tool{
+		Tool: types.Tool{
 			Name:        name,
 			Description: description,
 			Parameters: objectParameters(map[string]any{

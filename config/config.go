@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/c00/harnesser/models"
+	"github.com/c00/harnesser/types"
 	"go.yaml.in/yaml/v4"
 )
 
@@ -20,7 +20,7 @@ const (
 type Config struct {
 	DataDir   string           `yaml:"-"`
 	Landlock  LandlockSettings `yaml:"landlock"`
-	LlmConfig models.LlmConfig `yaml:"llmConfig"`
+	LlmConfig types.LlmConfig  `yaml:"llmConfig"`
 }
 
 type LandlockSettings struct {
@@ -110,7 +110,7 @@ func Defaults() Config {
 			Active:      true,
 			IncludePath: true,
 		},
-		LlmConfig: models.LlmConfig{
+		LlmConfig: types.LlmConfig{
 			Name:     "openrouter",
 			Provider: "openrouter",
 			Models: []string{
@@ -118,7 +118,7 @@ func Defaults() Config {
 				"deepseek/deepseek-v4-flash-0731",
 			},
 			MaxOutputTokens: 2048,
-			Reasoning:       models.ReasoningMedium,
+			Reasoning:       types.ReasoningMedium,
 		},
 	}
 }

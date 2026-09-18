@@ -10,8 +10,8 @@ import (
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/c00/harnesser/models"
-	"github.com/c00/harnesser/runner"
+	"github.com/c00/harnesser/agent"
+	"github.com/c00/harnesser/types"
 )
 
 // model for BubbleTea
@@ -28,12 +28,12 @@ type tuiModel struct {
 	permission *permissionModel
 
 	// agent is the LLM Agent
-	agent *runner.Runner
+	agent *agent.Agent
 
 	// send func to send messages to the tea program
 	send func(tea.Msg)
 	// partialMsg is the current streaming message
-	partialMsg models.Message
+	partialMsg types.Message
 	// Set to the current length of agent messages when starting inference, so we can track when inference is done.
 	partialMsgIdx int
 	// runOnStart is set when the command includes a prompt that needs inference.
@@ -45,12 +45,12 @@ type tuiModel struct {
 }
 
 type runStepResultMsg struct {
-	response runner.Response
+	response agent.Response
 	err      error
 }
 
 type partialMsgUpdate struct {
-	delta models.MessageDelta
+	delta types.MessageDelta
 }
 
 type tuiState string
@@ -61,7 +61,7 @@ const (
 	askPermission tuiState = "ask-permission"
 )
 
-func initialModel(ctx context.Context, agent *runner.Runner, runOnStart bool, send func(tea.Msg)) tuiModel {
+func initialModel(ctx context.Context, agent *agent.Agent, runOnStart bool, send func(tea.Msg)) tuiModel {
 	// 1. Initialize Spinner
 	s := spinner.New()
 	s.Spinner = spinner.Dot
@@ -96,9 +96,9 @@ func initialModel(ctx context.Context, agent *runner.Runner, runOnStart bool, se
 		state:      state,
 		send:       send,
 		runOnStart: runOnStart,
-		partialMsg: models.Message{
-			Role:    models.RoleAssistant,
-			Content: models.MessageParts{{Type: "text"}},
+		partialMsg: types.Message{
+			Role:    types.RoleAssistant,
+			Content: types.MessageParts{{Type: "text"}},
 		},
 		partialMsgIdx: len(agent.Messages()),
 	}
@@ -139,7 +139,7 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if input != "" {
 				m.state = busy
 				m.textarea.Blur()
-				m.agent.AddMessage(models.NewUserTextMessage(input))
+				m.agent.AddMessage(types.NewUserTextMessage(input))
 
 				cmds = append(cmds, m.agentStepCmd(m.ctx), m.spinner.Tick)
 
@@ -165,21 +165,21 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Handle the LLM response
 		switch msg.response.Type {
-		case runner.ResponseTypeNew,
-			runner.ResponseTypeInferenceResultNoTools:
+		case agent.ResponseTypeNew,
+			agent.ResponseTypeInferenceResultNoTools:
 			// Just wait for more input
 			m.state = ready
 			cmds = append(cmds, m.textarea.Focus())
-		case runner.ResponseTypeInferenceResultWithTools,
-			runner.ResponseTypeToolResults:
+		case agent.ResponseTypeInferenceResultWithTools,
+			agent.ResponseTypeToolResults:
 			m.state = busy // For clarity
 
 			// Run another step
 			cmds = append(cmds, m.agentStepCmd(m.ctx))
 
-		case runner.ResponseTypeDone:
+		case agent.ResponseTypeDone:
 			return m, tea.Quit
-		case runner.ResponseTypeAskPermission:
+		case agent.ResponseTypeAskPermission:
 			permission, err := newPermissionModel(msg.response.ToApprove, m.viewport.Width())
 			if err != nil {
 				m.err = fmt.Errorf("cannot ask permission: %w", err)
@@ -310,7 +310,7 @@ func (m *tuiModel) agentStepCmd(ctx context.Context) tea.Cmd {
 	m.partialMsg.Content[0].Text = ""
 
 	return func() tea.Msg {
-		resp, err := m.agent.RunStepStream(ctx, func(md models.MessageDelta) {
+		resp, err := m.agent.RunStepStream(ctx, func(md types.MessageDelta) {
 			m.send(partialMsgUpdate{delta: md})
 		})
 
@@ -321,7 +321,7 @@ func (m *tuiModel) agentStepCmd(ctx context.Context) tea.Cmd {
 	}
 }
 
-func confirmToolCallCmd(ctx context.Context, agent *runner.Runner, msg permissionDecisionMsg) tea.Cmd {
+func confirmToolCallCmd(ctx context.Context, agent *agent.Agent, msg permissionDecisionMsg) tea.Cmd {
 	return func() tea.Msg {
 		err := agent.ConfirmToolCall(ctx, msg.toolCallID, msg.decision)
 		return permissionDecisionResultMsg{toolCallID: msg.toolCallID, err: err}
@@ -348,7 +348,7 @@ func (m *tuiModel) renderMessages() string {
 
 	messages := make([]renderedMessage, 0, msgCount)
 	for _, message := range m.agent.Messages() {
-		if message.Role == models.RoleTool {
+		if message.Role == types.RoleTool {
 			content := message.Content.String()
 			characters := []rune(content)
 			if len(characters) > 200 {
@@ -357,7 +357,7 @@ func (m *tuiModel) renderMessages() string {
 			messages = append(messages, renderedMessage{tag: "tool", label: "result", content: content})
 		} else {
 			label := "assistant"
-			if message.Role == models.RoleUser {
+			if message.Role == types.RoleUser {
 				label = "you"
 			}
 

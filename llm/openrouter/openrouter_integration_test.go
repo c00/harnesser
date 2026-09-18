@@ -8,7 +8,7 @@ import (
 
 	"github.com/c00/harnesser/llm"
 	"github.com/c00/harnesser/llm/llmtestsuite"
-	"github.com/c00/harnesser/models"
+	"github.com/c00/harnesser/types"
 )
 
 func TestOpenRouter_LlmTestSuite(t *testing.T) {
@@ -19,7 +19,7 @@ func TestOpenRouter_LlmTestSuite(t *testing.T) {
 		t.Skip("No OPENROUTER_API_KEY set. Skipping openrouter llm test")
 	}
 
-	cfg := models.LlmConfig{
+	cfg := types.LlmConfig{
 		Models:          []string{"openai/gpt-3.5-turbo-16k"},
 		Name:            "openrouter",
 		MaxOutputTokens: 25,

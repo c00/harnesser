@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/c00/harnesser/models"
-	"github.com/c00/harnesser/runner"
+	"github.com/c00/harnesser/agent"
+	"github.com/c00/harnesser/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -14,18 +14,18 @@ func TestPermissionModelDecision(t *testing.T) {
 	tests := []struct {
 		name         string
 		key          string
-		wantDecision models.ToolCallDecision
+		wantDecision types.ToolCallDecision
 	}{
-		{name: "approve", key: "y", wantDecision: models.ToolCallDecisionApprove},
-		{name: "reject", key: "n", wantDecision: models.ToolCallDecisionReject},
+		{name: "approve", key: "y", wantDecision: types.ToolCallDecisionApprove},
+		{name: "reject", key: "n", wantDecision: types.ToolCallDecisionReject},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			model, err := newPermissionModel([]runner.PendingToolcall{{
-				ToolCall: models.ToolCall{ToolCallID: "call_1", Function: "echo", Args: `{}`},
-				ToolDefinition: models.ToolDefinition{
-					Tool:    models.Tool{Name: "echo"},
+			model, err := newPermissionModel([]agent.PendingToolcall{{
+				ToolCall: types.ToolCall{ToolCallID: "call_1", Function: "echo", Args: `{}`},
+				ToolDefinition: types.ToolDefinition{
+					Tool:    types.Tool{Name: "echo"},
 					Command: []string{"echo"},
 				},
 			}}, 80)

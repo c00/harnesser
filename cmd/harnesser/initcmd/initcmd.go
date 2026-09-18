@@ -6,9 +6,9 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/c00/harnesser/cmd/internal/secrets"
 	"github.com/c00/harnesser/cmd/internal/standardtools"
 	"github.com/c00/harnesser/config"
-	"github.com/c00/harnesser/secrets"
 	"github.com/spf13/cobra"
 )
 

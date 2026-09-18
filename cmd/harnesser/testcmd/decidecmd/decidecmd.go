@@ -6,7 +6,7 @@ import (
 	"os"
 
 	"github.com/c00/harnesser/cmd/internal/setup"
-	"github.com/c00/harnesser/models"
+	"github.com/c00/harnesser/types"
 	"github.com/spf13/cobra"
 )
 
@@ -35,9 +35,9 @@ func run(cmd *cobra.Command, args []string) error {
 	}
 
 	approve, _ := cmd.Flags().GetBool("approve")
-	decision := models.ToolCallDecisionReject
+	decision := types.ToolCallDecisionReject
 	if approve {
-		decision = models.ToolCallDecisionApprove
+		decision = types.ToolCallDecisionApprove
 	}
 
 	// Run

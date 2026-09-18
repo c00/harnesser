@@ -8,31 +8,32 @@ import (
 	"strings"
 
 	"github.com/c00/harnesser/llm"
-	"github.com/c00/harnesser/models"
+	"github.com/c00/harnesser/types"
 )
 
 var _ llm.LlmProvider = (*MockLLM)(nil)
 var _ llm.LlmStreamingProvider = (*MockLLM)(nil)
-var _ llm.StructuredOutputProvider = (*MockLLM)(nil)
+
+// var _ llm.StructuredOutputProvider = (*MockLLM)(nil)
 
 // MockLLM is a fake LLM that will return responses based on predefined keywords or phrases (case insensitive)
 // The response corresponding to the key that appears earliest in the prompt is returned.
 type MockLLM struct {
-	Response            map[string]models.Message
-	StructuredResponses map[string]models.SchemaMarshaller
+	Response            map[string]types.Message
+	StructuredResponses map[string]types.SchemaMarshaller
 	logger              *slog.Logger
 }
 
 func New() *MockLLM {
 	return &MockLLM{
-		Response:            make(map[string]models.Message),
-		StructuredResponses: make(map[string]models.SchemaMarshaller),
+		Response:            make(map[string]types.Message),
+		StructuredResponses: make(map[string]types.SchemaMarshaller),
 		logger:              slog.Default().With("package", "mockllm"),
 	}
 }
 
-func (m *MockLLM) Config() models.LlmConfig {
-	return models.LlmConfig{
+func (m *MockLLM) Config() types.LlmConfig {
+	return types.LlmConfig{
 		Name:   "Mock LLM",
 		Models: []string{"Mock"},
 	}
@@ -40,11 +41,11 @@ func (m *MockLLM) Config() models.LlmConfig {
 
 func (m *MockLLM) AddTextResponse(phrase, responseText string) {
 	if m.Response == nil {
-		m.Response = make(map[string]models.Message)
+		m.Response = make(map[string]types.Message)
 	}
-	m.Response[phrase] = models.Message{
-		Role: models.RoleAssistant,
-		Content: []models.MessagePart{
+	m.Response[phrase] = types.Message{
+		Role: types.RoleAssistant,
+		Content: []types.MessagePart{
 			{
 				Type: "text",
 				Text: responseText,
@@ -53,26 +54,26 @@ func (m *MockLLM) AddTextResponse(phrase, responseText string) {
 	}
 }
 
-func (m *MockLLM) AddEmptyResponse(phrase string, finishReason models.FinishReason) {
+func (m *MockLLM) AddEmptyResponse(phrase string, finishReason types.FinishReason) {
 	if m.Response == nil {
-		m.Response = make(map[string]models.Message)
+		m.Response = make(map[string]types.Message)
 	}
-	m.Response[phrase] = models.Message{
-		Role:         models.RoleAssistant,
-		ToolCalls:    []models.ToolCall{},
-		Content:      models.MessageParts{},
+	m.Response[phrase] = types.Message{
+		Role:         types.RoleAssistant,
+		ToolCalls:    []types.ToolCall{},
+		Content:      types.MessageParts{},
 		FinishReason: finishReason,
 	}
 }
 
 func (m *MockLLM) AddToolcallResponse(phrase, toolName, args, responseText string) {
 	if m.Response == nil {
-		m.Response = make(map[string]models.Message)
+		m.Response = make(map[string]types.Message)
 	}
 
-	msg := models.Message{
-		Role: models.RoleAssistant,
-		ToolCalls: []models.ToolCall{
+	msg := types.Message{
+		Role: types.RoleAssistant,
+		ToolCalls: []types.ToolCall{
 			{
 				ToolCallID: "call_" + toolName,
 				Function:   toolName,
@@ -82,7 +83,7 @@ func (m *MockLLM) AddToolcallResponse(phrase, toolName, args, responseText strin
 	}
 
 	if responseText != "" {
-		msg.Content = []models.MessagePart{
+		msg.Content = []types.MessagePart{
 			{
 				Type: "text",
 				Text: responseText,
@@ -93,9 +94,9 @@ func (m *MockLLM) AddToolcallResponse(phrase, toolName, args, responseText strin
 	m.Response[phrase] = msg
 }
 
-func (m *MockLLM) GenerateStructuredOutput(ctx context.Context, messages []models.Message, tools []models.Tool, output models.SchemaMarshaller) (models.LlmUsage, error) {
+func (m *MockLLM) GenerateStructuredOutput(ctx context.Context, messages []types.Message, tools []types.Tool, output types.SchemaMarshaller) (types.LlmUsage, error) {
 	if len(messages) == 0 {
-		return models.LlmUsage{}, errors.New("no messages")
+		return types.LlmUsage{}, errors.New("no messages")
 	}
 
 	// Get the last user message to search for keywords/phrases
@@ -106,7 +107,7 @@ func (m *MockLLM) GenerateStructuredOutput(ctx context.Context, messages []model
 	}
 
 	lowerText := strings.ToLower(fullText)
-	var bestMatch models.SchemaMarshaller
+	var bestMatch types.SchemaMarshaller
 	firstIndex := -1
 
 	for phrase, resp := range m.StructuredResponses {
@@ -123,19 +124,19 @@ func (m *MockLLM) GenerateStructuredOutput(ctx context.Context, messages []model
 
 	if bestMatch != nil {
 		output = bestMatch
-		return models.LlmUsage{}, nil
+		return types.LlmUsage{}, nil
 	}
 
-	return models.LlmUsage{}, errors.New("no response defined")
+	return types.LlmUsage{}, errors.New("no response defined")
 }
 
-func (m *MockLLM) AddStructuredResponse(phrase string, response models.SchemaMarshaller) {
+func (m *MockLLM) AddStructuredResponse(phrase string, response types.SchemaMarshaller) {
 	m.StructuredResponses[phrase] = response
 }
 
-func (m *MockLLM) Generate(ctx context.Context, messages []models.Message, tools []models.Tool) (models.Message, error) {
+func (m *MockLLM) Generate(ctx context.Context, messages []types.Message, tools []types.Tool) (types.Message, error) {
 	if len(messages) == 0 {
-		return models.Message{}, errors.New("no messages")
+		return types.Message{}, errors.New("no messages")
 	}
 
 	// Get the last user message to search for keywords/phrases
@@ -146,7 +147,7 @@ func (m *MockLLM) Generate(ctx context.Context, messages []models.Message, tools
 	}
 
 	lowerText := strings.ToLower(fullText)
-	var bestMatch *models.Message
+	var bestMatch *types.Message
 	firstIndex := -1
 
 	for phrase, resp := range m.Response {
@@ -166,31 +167,31 @@ func (m *MockLLM) Generate(ctx context.Context, messages []models.Message, tools
 	}
 
 	// Default response if no keyword matches
-	return models.Message{
-		Role:    models.RoleAssistant,
-		Content: []models.MessagePart{{Type: "text", Text: "I don't have a response to that."}},
+	return types.Message{
+		Role:    types.RoleAssistant,
+		Content: []types.MessagePart{{Type: "text", Text: "I don't have a response to that."}},
 		Model:   m.Config().Models[0],
 	}, nil
 }
 
-func (m *MockLLM) GenerateStream(ctx context.Context, messages []models.Message, tools []models.Tool, callback llm.StreamDeltaFunc) (models.Message, error) {
+func (m *MockLLM) GenerateStream(ctx context.Context, messages []types.Message, tools []types.Tool, callback llm.StreamDeltaFunc) (types.Message, error) {
 	if callback == nil {
-		return models.Message{}, errors.New("stream callback is nil")
+		return types.Message{}, errors.New("stream callback is nil")
 	}
 
 	response, err := m.Generate(ctx, messages, tools)
 	if err != nil {
-		return models.Message{}, err
+		return types.Message{}, err
 	}
 
-	delta := models.MessageDelta{Reasoning: response.Reasoning}
+	delta := types.MessageDelta{Reasoning: response.Reasoning}
 	for _, part := range response.Content {
-		if part.Type == models.PartText {
+		if part.Type == types.PartText {
 			delta.Text += part.Text
 		}
 	}
 	for index, toolCall := range response.ToolCalls {
-		delta.ToolCalls = append(delta.ToolCalls, models.ToolCallDelta{
+		delta.ToolCalls = append(delta.ToolCalls, types.ToolCallDelta{
 			Index:     index,
 			ID:        toolCall.ToolCallID,
 			Function:  toolCall.Function,

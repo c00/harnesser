@@ -7,7 +7,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/c00/harnesser/models"
+	"github.com/c00/harnesser/types"
 	openrouterlib "github.com/revrost/go-openrouter"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -20,13 +20,13 @@ func TestConvertMessages(t *testing.T) {
 
 	tests := []struct {
 		name  string
-		input []models.Message
+		input []types.Message
 		want  []openrouterlib.ChatCompletionMessage
 	}{
 		{
 			name: "simple text",
-			input: []models.Message{
-				{Role: models.RoleUser, Content: []models.MessagePart{{Type: "text", Text: "hello"}}},
+			input: []types.Message{
+				{Role: types.RoleUser, Content: []types.MessagePart{{Type: "text", Text: "hello"}}},
 			},
 			want: []openrouterlib.ChatCompletionMessage{
 				{Role: "user", Content: openrouterlib.Content{Multi: []openrouterlib.ChatMessagePart{
@@ -36,11 +36,11 @@ func TestConvertMessages(t *testing.T) {
 		},
 		{
 			name: "attachment only becomes text placeholder",
-			input: []models.Message{
+			input: []types.Message{
 				{
-					Role: models.RoleUser,
-					Content: []models.MessagePart{
-						{Type: "image_url", Attachment: &models.Attachment{Filename: "receipt.png"}},
+					Role: types.RoleUser,
+					Content: []types.MessagePart{
+						{Type: "image_url", Attachment: &types.Attachment{Filename: "receipt.png"}},
 					},
 				},
 			},
@@ -52,12 +52,12 @@ func TestConvertMessages(t *testing.T) {
 		},
 		{
 			name: "text and attachment",
-			input: []models.Message{
+			input: []types.Message{
 				{
-					Role: models.RoleUser,
-					Content: []models.MessagePart{
+					Role: types.RoleUser,
+					Content: []types.MessagePart{
 						{Type: "text", Text: "see attached"},
-						{Type: "image_url", Attachment: &models.Attachment{Filename: "invoice.jpg"}},
+						{Type: "image_url", Attachment: &types.Attachment{Filename: "invoice.jpg"}},
 					},
 				},
 			},
@@ -70,9 +70,9 @@ func TestConvertMessages(t *testing.T) {
 		},
 		{
 			name: "cache control short",
-			input: []models.Message{
-				{Role: models.RoleSystem, Content: []models.MessagePart{
-					{Type: "text", Text: "sys", CacheControl: models.CacheModeShort},
+			input: []types.Message{
+				{Role: types.RoleSystem, Content: []types.MessagePart{
+					{Type: "text", Text: "sys", CacheControl: types.CacheModeShort},
 				}},
 			},
 			want: []openrouterlib.ChatCompletionMessage{
@@ -83,9 +83,9 @@ func TestConvertMessages(t *testing.T) {
 		},
 		{
 			name: "cache control long",
-			input: []models.Message{
-				{Role: models.RoleSystem, Content: []models.MessagePart{
-					{Type: "text", Text: "sys", CacheControl: models.CacheModeLong},
+			input: []types.Message{
+				{Role: types.RoleSystem, Content: []types.MessagePart{
+					{Type: "text", Text: "sys", CacheControl: types.CacheModeLong},
 				}},
 			},
 			want: []openrouterlib.ChatCompletionMessage{
@@ -96,10 +96,10 @@ func TestConvertMessages(t *testing.T) {
 		},
 		{
 			name: "tool calls",
-			input: []models.Message{
+			input: []types.Message{
 				{
-					Role: models.RoleAssistant,
-					ToolCalls: []models.ToolCall{
+					Role: types.RoleAssistant,
+					ToolCalls: []types.ToolCall{
 						{ToolCallID: "call_1", Function: "get_order", Args: `{"id":1}`},
 					},
 				},
@@ -116,8 +116,8 @@ func TestConvertMessages(t *testing.T) {
 		},
 		{
 			name: "tool role",
-			input: []models.Message{
-				{Role: models.RoleTool, ToolID: "call_1", Content: []models.MessagePart{{Type: "text", Text: "result"}}},
+			input: []types.Message{
+				{Role: types.RoleTool, ToolID: "call_1", Content: []types.MessagePart{{Type: "text", Text: "result"}}},
 			},
 			want: []openrouterlib.ChatCompletionMessage{
 				{Role: "tool", ToolCallID: "call_1", Content: openrouterlib.Content{Multi: []openrouterlib.ChatMessagePart{
@@ -148,11 +148,11 @@ func TestGenerateDoesNotRetry(t *testing.T) {
 
 	clientConfig := openrouterlib.DefaultConfig("test-api-key")
 	clientConfig.BaseURL = server.URL
-	provider := New(t.Context(), models.LlmConfig{Models: []string{"test/model"}}, "test-api-key")
+	provider := New(t.Context(), types.LlmConfig{Models: []string{"test/model"}}, "test-api-key")
 	provider.client = openrouterlib.NewClientWithConfig(*clientConfig)
 
-	_, err := provider.Generate(t.Context(), []models.Message{
-		{Role: models.RoleUser, Content: []models.MessagePart{{Type: "text", Text: "hello"}}},
+	_, err := provider.Generate(t.Context(), []types.Message{
+		{Role: types.RoleUser, Content: []types.MessagePart{{Type: "text", Text: "hello"}}},
 	}, nil)
 
 	require.Error(t, err)
@@ -182,13 +182,13 @@ func TestGenerateStream(t *testing.T) {
 
 	clientConfig := openrouterlib.DefaultConfig("test-api-key")
 	clientConfig.BaseURL = server.URL
-	provider := New(t.Context(), models.LlmConfig{Models: []string{"test/model"}}, "test-api-key")
+	provider := New(t.Context(), types.LlmConfig{Models: []string{"test/model"}}, "test-api-key")
 	provider.client = openrouterlib.NewClientWithConfig(*clientConfig)
 
-	var deltas []models.MessageDelta
-	result, err := provider.GenerateStream(t.Context(), []models.Message{
-		{Role: models.RoleUser, Content: []models.MessagePart{{Type: models.PartText, Text: "hello"}}},
-	}, nil, func(delta models.MessageDelta) {
+	var deltas []types.MessageDelta
+	result, err := provider.GenerateStream(t.Context(), []types.Message{
+		{Role: types.RoleUser, Content: []types.MessagePart{{Type: types.PartText, Text: "hello"}}},
+	}, nil, func(delta types.MessageDelta) {
 		deltas = append(deltas, delta)
 	})
 
@@ -204,7 +204,7 @@ func TestGenerateStream(t *testing.T) {
 	assert.Equal(t, `{"q":`, deltas[1].ToolCalls[0].Arguments)
 	assert.Empty(t, deltas[3])
 
-	assert.Equal(t, models.RoleAssistant, result.Role)
+	assert.Equal(t, types.RoleAssistant, result.Role)
 	require.Len(t, result.Content, 1)
 	assert.Equal(t, "Hello", result.Content[0].Text)
 	require.Len(t, result.Reasoning, 1)
@@ -213,7 +213,7 @@ func TestGenerateStream(t *testing.T) {
 	assert.Equal(t, "call_1", result.ToolCalls[0].ToolCallID)
 	assert.Equal(t, "lookup", result.ToolCalls[0].Function)
 	assert.Equal(t, `{"q":"value"}`, result.ToolCalls[0].Args)
-	assert.Equal(t, models.FinishReasonToolCalls, result.FinishReason)
+	assert.Equal(t, types.FinishReasonToolCalls, result.FinishReason)
 	assert.Equal(t, "test/model", result.Model)
 	assert.Equal(t, 11, result.InputTokens)
 	assert.Equal(t, 7, result.OutputTokens)
@@ -223,7 +223,7 @@ func TestGenerateStream(t *testing.T) {
 func TestGenerateStreamRejectsNilCallback(t *testing.T) {
 	t.Parallel()
 
-	provider := New(t.Context(), models.LlmConfig{Models: []string{"test/model"}}, "test-api-key")
+	provider := New(t.Context(), types.LlmConfig{Models: []string{"test/model"}}, "test-api-key")
 	_, err := provider.GenerateStream(t.Context(), nil, nil, nil)
 
 	require.EqualError(t, err, "stream callback is nil")

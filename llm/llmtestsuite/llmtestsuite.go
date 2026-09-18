@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/c00/harnesser/llm"
-	"github.com/c00/harnesser/models"
+	"github.com/c00/harnesser/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -22,8 +22,8 @@ func basicResponse(t *testing.T, llmFactory func() llm.LlmProvider) {
 	llm := llmFactory()
 	response, err := llm.Generate(
 		t.Context(),
-		[]models.Message{models.NewUserTextMessage("Just say the word 'Hi'. Nothing else. This is to test if you're working. Only reply with 'Hi'")},
-		[]models.Tool{},
+		[]types.Message{types.NewUserTextMessage("Just say the word 'Hi'. Nothing else. This is to test if you're working. Only reply with 'Hi'")},
+		[]types.Tool{},
 	)
 
 	require.NoError(t, err)
@@ -35,8 +35,8 @@ func basicToolCalling(t *testing.T, llmFactory func() llm.LlmProvider) {
 	llm := llmFactory()
 	response, err := llm.Generate(
 		t.Context(),
-		[]models.Message{models.NewUserTextMessage("Can tell me the weather in Amsterdam?")},
-		[]models.Tool{TestTool},
+		[]types.Message{types.NewUserTextMessage("Can tell me the weather in Amsterdam?")},
+		[]types.Tool{TestTool},
 	)
 
 	require.NoError(t, err)

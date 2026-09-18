@@ -8,18 +8,18 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/c00/harnesser/agent"
+	"github.com/c00/harnesser/cmd/internal/sandbox"
+	"github.com/c00/harnesser/cmd/internal/secrets"
 	"github.com/c00/harnesser/config"
-	"github.com/c00/harnesser/historyprovider"
-	"github.com/c00/harnesser/landlock"
+	"github.com/c00/harnesser/history"
 	"github.com/c00/harnesser/llm/openrouter"
-	"github.com/c00/harnesser/promptsprovider"
-	"github.com/c00/harnesser/runner"
-	"github.com/c00/harnesser/secrets"
-	"github.com/c00/harnesser/toolsprovider"
+	"github.com/c00/harnesser/systemprompts"
+	"github.com/c00/harnesser/toolset"
 	"github.com/spf13/cobra"
 )
 
-func Setup(cmd *cobra.Command) (*runner.Runner, error) {
+func Setup(cmd *cobra.Command) (*agent.Agent, error) {
 	ctx := cmd.Context()
 
 	// Read config
@@ -42,13 +42,13 @@ func Setup(cmd *cobra.Command) (*runner.Runner, error) {
 	provider := openrouter.New(ctx, cfg.LlmConfig, apiKey)
 
 	// Initialize History
-	history := historyprovider.NewFileProvider(historyDir)
+	hist := history.NewFileProvider(historyDir)
 
 	historyFile, _ := cmd.Flags().GetString("thread")
 	cont, _ := cmd.Flags().GetBool("continue")
 	// Use latest file to continue
 	if historyFile == "" && cont {
-		list, err := history.List()
+		list, err := hist.List()
 		if err != nil {
 			return nil, fmt.Errorf("cannot list history files: %w", err)
 		}
@@ -59,21 +59,21 @@ func Setup(cmd *cobra.Command) (*runner.Runner, error) {
 
 	// If it's still empty, create a new one
 	if historyFile == "" {
-		historyFile = historyprovider.NewKey()
+		historyFile = history.NewKey()
 	}
-	history.Select(historyFile)
+	hist.Select(historyFile)
 
-	prompts, err := promptsprovider.NewFileProvider(promptsDir)
+	prompts, err := systemprompts.NewFileProvider(promptsDir)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create prompts provider: %w", err)
 	}
 
-	tools, err := toolsprovider.NewFileProvider(toolsDir)
+	tools, err := toolset.NewFileProvider(toolsDir)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create tools provider: %w", err)
 	}
 
-	agent := runner.NewRunner(provider, prompts, history, tools)
+	agent := agent.NewAgent(provider, prompts, hist, tools)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create runner: %w", err)
 	}
@@ -84,8 +84,8 @@ func Setup(cmd *cobra.Command) (*runner.Runner, error) {
 
 		roDirs := []string{}
 		roDirs = append(roDirs, cfg.Landlock.ExtraRODirs...)
-		roDirs = append(roDirs, landlock.PathToDirs()...)
-		roDirs = append(roDirs, landlock.RequiredRODirs()...)
+		roDirs = append(roDirs, sandbox.PathToDirs()...)
+		roDirs = append(roDirs, sandbox.RequiredRODirs()...)
 
 		rwDirs := []string{}
 		rwDirs = append(rwDirs, cfg.Landlock.ExtraRWDirs...)
@@ -111,7 +111,7 @@ func Setup(cmd *cobra.Command) (*runner.Runner, error) {
 			}
 		}
 
-		err := landlock.Landlock(roDirs, rwDirs)
+		err := sandbox.Sandbox(roDirs, rwDirs)
 		if err != nil {
 			return nil, fmt.Errorf("cannot landlock: %w", err)
 		}

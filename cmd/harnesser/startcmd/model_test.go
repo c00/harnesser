@@ -6,17 +6,17 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/c00/harnesser/historyprovider"
-	"github.com/c00/harnesser/models"
-	"github.com/c00/harnesser/promptsprovider"
-	"github.com/c00/harnesser/runner"
-	"github.com/c00/harnesser/toolsprovider"
+	"github.com/c00/harnesser/agent"
+	"github.com/c00/harnesser/history"
+	"github.com/c00/harnesser/systemprompts"
+	"github.com/c00/harnesser/toolset"
+	"github.com/c00/harnesser/types"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestViewportHeightTracksTextareaHeight(t *testing.T) {
-	agent := runner.NewRunner(nil, promptsprovider.NewMemoryProvider(), historyprovider.NewMemoryProvider(), toolsprovider.NewMemoryProvider())
+	agent := agent.NewAgent(nil, systemprompts.NewMemoryProvider(), history.NewMemoryProvider(), toolset.NewMemoryProvider())
 	model := initialModel(t.Context(), agent, false, func(m tea.Msg) {})
 	model.state = ready
 	model.textarea.Focus()
@@ -53,7 +53,7 @@ func TestInitialModelStartupState(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			agent := runner.NewRunner(nil, promptsprovider.NewMemoryProvider(), historyprovider.NewMemoryProvider(), toolsprovider.NewMemoryProvider())
+			agent := agent.NewAgent(nil, systemprompts.NewMemoryProvider(), history.NewMemoryProvider(), toolset.NewMemoryProvider())
 			model := initialModel(t.Context(), agent, tt.runOnStart, func(m tea.Msg) {})
 
 			assert.Equal(t, tt.wantState, model.state)
@@ -64,9 +64,9 @@ func TestInitialModelStartupState(t *testing.T) {
 }
 
 func TestInitialModelRendersLoadedHistory(t *testing.T) {
-	agent := runner.NewRunner(nil, promptsprovider.NewMemoryProvider(), historyprovider.NewMemoryProvider(), toolsprovider.NewMemoryProvider())
-	agent.AddMessage(models.NewUserTextMessage("previous question"))
-	agent.AddMessage(models.NewAssistantMessage("previous answer"))
+	agent := agent.NewAgent(nil, systemprompts.NewMemoryProvider(), history.NewMemoryProvider(), toolset.NewMemoryProvider())
+	agent.AddMessage(types.NewUserTextMessage("previous question"))
+	agent.AddMessage(types.NewAssistantMessage("previous answer"))
 	model := initialModel(t.Context(), agent, false, func(m tea.Msg) {})
 
 	updated, _ := model.Update(tea.WindowSizeMsg{Width: 80, Height: 20})
@@ -78,7 +78,7 @@ func TestInitialModelRendersLoadedHistory(t *testing.T) {
 }
 
 func TestViewportHeightReservesPermissionPrompt(t *testing.T) {
-	agent := runner.NewRunner(nil, promptsprovider.NewMemoryProvider(), historyprovider.NewMemoryProvider(), toolsprovider.NewMemoryProvider())
+	agent := agent.NewAgent(nil, systemprompts.NewMemoryProvider(), history.NewMemoryProvider(), toolset.NewMemoryProvider())
 	model := initialModel(t.Context(), agent, false, func(m tea.Msg) {})
 	model.state = askPermission
 	model.permission = &permissionModel{
@@ -100,25 +100,25 @@ func TestViewportHeightReservesPermissionPrompt(t *testing.T) {
 }
 
 func TestRenderMessages(t *testing.T) {
-	tools := toolsprovider.NewMemoryProvider()
-	tools.AddDefinition(models.ToolDefinition{
-		Tool: models.Tool{
+	tools := toolset.NewMemoryProvider()
+	tools.AddDefinition(types.ToolDefinition{
+		Tool: types.Tool{
 			Name: "print",
 		},
 		Command: []string{"printf", "{{.Params.path}}"},
 	})
 
-	agent := runner.NewRunner(nil, promptsprovider.NewMemoryProvider(), historyprovider.NewMemoryProvider(), tools)
-	agent.AddMessage(models.NewUserTextMessage("first"))
-	agent.AddMessage(models.NewUserTextMessage("second"))
-	agent.AddMessage(models.Message{
-		Role:      models.RoleAssistant,
-		Content:   models.MessageParts{{Type: models.PartText, Text: "checking"}},
-		Reasoning: models.ReasoningParts{{Type: "reasoning.text", Text: "hidden thought"}},
-		ToolCalls: []models.ToolCall{{Function: "print", Args: `{"path":"report.txt"}`}},
+	agent := agent.NewAgent(nil, systemprompts.NewMemoryProvider(), history.NewMemoryProvider(), tools)
+	agent.AddMessage(types.NewUserTextMessage("first"))
+	agent.AddMessage(types.NewUserTextMessage("second"))
+	agent.AddMessage(types.Message{
+		Role:      types.RoleAssistant,
+		Content:   types.MessageParts{{Type: types.PartText, Text: "checking"}},
+		Reasoning: types.ReasoningParts{{Type: "reasoning.text", Text: "hidden thought"}},
+		ToolCalls: []types.ToolCall{{Function: "print", Args: `{"path":"report.txt"}`}},
 	})
-	agent.AddMessage(models.NewToolResultMessage("call_1", "ignored result"))
-	agent.AddMessage(models.NewAssistantMessage("done"))
+	agent.AddMessage(types.NewToolResultMessage("call_1", "ignored result"))
+	agent.AddMessage(types.NewAssistantMessage("done"))
 
 	model := initialModel(t.Context(), agent, false, func(m tea.Msg) {})
 	model.viewport.SetWidth(80)
@@ -144,8 +144,8 @@ func TestRenderMessages(t *testing.T) {
 }
 
 func TestRenderMessagesTruncatesToolResults(t *testing.T) {
-	agent := runner.NewRunner(nil, promptsprovider.NewMemoryProvider(), historyprovider.NewMemoryProvider(), toolsprovider.NewMemoryProvider())
-	agent.AddMessage(models.NewToolResultMessage("call_1", strings.Repeat("界", 201)))
+	agent := agent.NewAgent(nil, systemprompts.NewMemoryProvider(), history.NewMemoryProvider(), toolset.NewMemoryProvider())
+	agent.AddMessage(types.NewToolResultMessage("call_1", strings.Repeat("界", 201)))
 
 	model := initialModel(t.Context(), agent, false, func(m tea.Msg) {})
 	model.viewport.SetWidth(500)

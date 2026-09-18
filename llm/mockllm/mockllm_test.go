@@ -6,7 +6,7 @@ import (
 	"github.com/c00/harnesser/llm"
 	"github.com/c00/harnesser/llm/llmtestsuite"
 	"github.com/c00/harnesser/llm/mockllm"
-	"github.com/c00/harnesser/models"
+	"github.com/c00/harnesser/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -29,7 +29,7 @@ func TestMockLLM_AddTextResponse(t *testing.T) {
 	require.NotNil(t, mock.Response)
 	resp, ok := mock.Response["test phrase"]
 	assert.True(t, ok)
-	assert.Equal(t, models.RoleAssistant, resp.Role)
+	assert.Equal(t, types.RoleAssistant, resp.Role)
 	assert.Equal(t, "test response", resp.Content[0].Text)
 }
 
@@ -41,7 +41,7 @@ func TestMockLLM_AddToolcallResponse(t *testing.T) {
 	require.NotNil(t, mock.Response)
 	resp, ok := mock.Response["trigger"]
 	assert.True(t, ok)
-	assert.Equal(t, models.RoleAssistant, resp.Role)
+	assert.Equal(t, types.RoleAssistant, resp.Role)
 	assert.Equal(t, "Checking weather...", resp.Content[0].Text)
 	require.Len(t, resp.ToolCalls, 1)
 	assert.Equal(t, "get_weather", resp.ToolCalls[0].Function)
@@ -50,14 +50,14 @@ func TestMockLLM_AddToolcallResponse(t *testing.T) {
 
 func TestMockLLM_Generate(t *testing.T) {
 	t.Parallel()
-	responses := map[string]models.Message{
+	responses := map[string]types.Message{
 		"hello": {
-			Role:    models.RoleAssistant,
-			Content: []models.MessagePart{{Type: "text", Text: "Hi there!"}},
+			Role:    types.RoleAssistant,
+			Content: []types.MessagePart{{Type: "text", Text: "Hi there!"}},
 		},
 		"order pizza": {
-			Role:    models.RoleAssistant,
-			Content: []models.MessagePart{{Type: "text", Text: "Ordering pizza now."}},
+			Role:    types.RoleAssistant,
+			Content: []types.MessagePart{{Type: "text", Text: "Ordering pizza now."}},
 		},
 	}
 
@@ -65,34 +65,34 @@ func TestMockLLM_Generate(t *testing.T) {
 
 	tests := []struct {
 		name          string
-		messages      []models.Message
+		messages      []types.Message
 		expectedText  string
 		expectedError bool
 	}{
 		{
 			name: "Match first keyword",
-			messages: []models.Message{
-				{Role: models.RoleUser, Content: []models.MessagePart{{Type: "text", Text: "Hello, I'd like to help."}}},
+			messages: []types.Message{
+				{Role: types.RoleUser, Content: []types.MessagePart{{Type: "text", Text: "Hello, I'd like to help."}}},
 			},
 			expectedText: "Hi there!",
 		},
 		{
 			name: "Match based on earliest appearance",
-			messages: []models.Message{
-				{Role: models.RoleUser, Content: []models.MessagePart{{Type: "text", Text: "Please order pizza and say hello."}}},
+			messages: []types.Message{
+				{Role: types.RoleUser, Content: []types.MessagePart{{Type: "text", Text: "Please order pizza and say hello."}}},
 			},
 			expectedText: "Ordering pizza now.",
 		},
 		{
 			name: "No match returns default",
-			messages: []models.Message{
-				{Role: models.RoleUser, Content: []models.MessagePart{{Type: "text", Text: "What is the weather?"}}},
+			messages: []types.Message{
+				{Role: types.RoleUser, Content: []types.MessagePart{{Type: "text", Text: "What is the weather?"}}},
 			},
 			expectedText: "I don't have a response to that.",
 		},
 		{
 			name:          "Empty messages returns error",
-			messages:      []models.Message{},
+			messages:      []types.Message{},
 			expectedError: true,
 		},
 	}
@@ -100,7 +100,7 @@ func TestMockLLM_Generate(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			resp, err := mock.Generate(t.Context(), tt.messages, []models.Tool{})
+			resp, err := mock.Generate(t.Context(), tt.messages, []types.Tool{})
 
 			if tt.expectedError {
 				assert.Error(t, err)
@@ -108,7 +108,7 @@ func TestMockLLM_Generate(t *testing.T) {
 			}
 
 			require.NoError(t, err)
-			assert.Equal(t, models.RoleAssistant, resp.Role)
+			assert.Equal(t, types.RoleAssistant, resp.Role)
 			assert.Equal(t, tt.expectedText, resp.Content[0].Text)
 		})
 	}
@@ -119,19 +119,19 @@ func TestMockLLM_GenerateStream(t *testing.T) {
 
 	mock := &mockllm.MockLLM{}
 	mock.AddToolcallResponse("weather", "get_weather", `{"city":"Amsterdam"}`, "Let me check.")
-	mock.Response["weather"] = models.Message{
+	mock.Response["weather"] = types.Message{
 		Role:      mock.Response["weather"].Role,
 		Content:   mock.Response["weather"].Content,
 		ToolCalls: mock.Response["weather"].ToolCalls,
-		Reasoning: []models.ReasoningDetails{
+		Reasoning: []types.ReasoningDetails{
 			{Index: 0, Type: "reasoning.text", Text: "Need the weather."},
 		},
 	}
 
-	var deltas []models.MessageDelta
-	result, err := mock.GenerateStream(t.Context(), []models.Message{
-		models.NewUserTextMessage("What is the weather?"),
-	}, nil, func(delta models.MessageDelta) {
+	var deltas []types.MessageDelta
+	result, err := mock.GenerateStream(t.Context(), []types.Message{
+		types.NewUserTextMessage("What is the weather?"),
+	}, nil, func(delta types.MessageDelta) {
 		deltas = append(deltas, delta)
 	})
 
@@ -139,7 +139,7 @@ func TestMockLLM_GenerateStream(t *testing.T) {
 	assert.Equal(t, mock.Response["weather"], result)
 	require.Len(t, deltas, 1)
 	assert.Equal(t, "Let me check.", deltas[0].Text)
-	assert.Equal(t, []models.ReasoningDetails(result.Reasoning), deltas[0].Reasoning)
+	assert.Equal(t, []types.ReasoningDetails(result.Reasoning), deltas[0].Reasoning)
 	require.Len(t, deltas[0].ToolCalls, 1)
 	assert.Equal(t, 0, deltas[0].ToolCalls[0].Index)
 	assert.Equal(t, "call_get_weather", deltas[0].ToolCalls[0].ID)

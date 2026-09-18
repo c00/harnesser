@@ -6,7 +6,7 @@ import (
 	"os"
 
 	"github.com/c00/harnesser/cmd/internal/setup"
-	"github.com/c00/harnesser/tools"
+	"github.com/c00/harnesser/toolcallbuilder"
 	"github.com/spf13/cobra"
 )
 
@@ -48,7 +48,7 @@ func run(cmd *cobra.Command, args []string) error {
 	if len(resp.ToApprove) > 0 {
 		fmt.Println("The following tools need approval:")
 		for _, pending := range resp.ToApprove {
-			builder, err := tools.NewToolCallBuilder(pending.ToolCall, pending.ToolDefinition)
+			builder, err := toolcallbuilder.NewToolCallBuilder(pending.ToolCall, pending.ToolDefinition)
 			if err != nil {
 				return fmt.Errorf("cannot create new tool call builder: %w", err)
 			}

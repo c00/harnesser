@@ -1,15 +1,12 @@
 package startcmd
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/c00/harnesser/cmd/internal/setup"
-	"github.com/c00/harnesser/internal/inputscan"
-	"github.com/c00/harnesser/models"
-	"github.com/c00/harnesser/runner"
+	"github.com/c00/harnesser/types"
 	"github.com/spf13/cobra"
 )
 
@@ -37,7 +34,7 @@ func run(cmd *cobra.Command, args []string) error {
 
 	initialPrompt := strings.Join(args, " ")
 	if initialPrompt != "" {
-		agent.AddMessage(models.NewUserTextMessage(initialPrompt))
+		agent.AddMessage(types.NewUserTextMessage(initialPrompt))
 	}
 
 	// Initialize UI
@@ -56,14 +53,4 @@ func run(cmd *cobra.Command, args []string) error {
 	}
 	return nil
 
-}
-
-func askForInput(ctx context.Context, agent *runner.Runner) bool {
-	prompt := inputscan.GetInput(ctx, "You: ")
-	if prompt == "" {
-		return false
-	}
-	agent.AddMessage(models.NewUserTextMessage(strings.TrimSpace(prompt)))
-
-	return true
 }

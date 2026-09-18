@@ -1,9 +1,9 @@
 package llmtestsuite
 
-import "github.com/c00/harnesser/models"
+import "github.com/c00/harnesser/types"
 
 // TestTool is used for tests where the execution of a tool call is needed
-var TestTool = models.Tool{
+var TestTool = types.Tool{
 	Name:        "get_weather",
 	Description: "Get the weather in a city",
 	// Example: { "city": "Amsterdam" }

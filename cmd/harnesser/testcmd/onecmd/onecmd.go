@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/c00/harnesser/cmd/internal/setup"
-	"github.com/c00/harnesser/models"
+	"github.com/c00/harnesser/types"
 	"github.com/spf13/cobra"
 )
 
@@ -40,7 +40,7 @@ func run(cmd *cobra.Command, args []string) error {
 	}
 
 	// Run
-	resp, err := agent.RunPrompt(ctx, models.NewUserTextMessage(prompt))
+	resp, err := agent.RunPrompt(ctx, types.NewUserTextMessage(prompt))
 	if err != nil {
 		return fmt.Errorf("cannot get response: %w", err)
 	}

@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/c00/harnesser/models"
+	"github.com/c00/harnesser/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -67,7 +67,7 @@ llmConfig:
 	assert.Equal(t, "anthropic", cfg.LlmConfig.Provider)
 	assert.Equal(t, []string{"claude-x"}, cfg.LlmConfig.Models)
 	assert.Equal(t, 4096, cfg.LlmConfig.MaxOutputTokens)
-	assert.Equal(t, models.ReasoningHigh, cfg.LlmConfig.Reasoning)
+	assert.Equal(t, types.ReasoningHigh, cfg.LlmConfig.Reasoning)
 
 	// No local .harnesser dir -> DataDir must not be set.
 	assert.Empty(t, cfg.DataDir)
@@ -93,7 +93,7 @@ llmConfig:
 	assert.Equal(t, "openai", cfg.LlmConfig.Provider)
 	assert.Equal(t, []string{"gpt-x"}, cfg.LlmConfig.Models)
 	assert.Equal(t, 1024, cfg.LlmConfig.MaxOutputTokens)
-	assert.Equal(t, models.ReasoningLow, cfg.LlmConfig.Reasoning)
+	assert.Equal(t, types.ReasoningLow, cfg.LlmConfig.Reasoning)
 
 	// Local .harnesser dir exists -> DataDir must point at it (absolute).
 	wantDataDir, err := filepath.Abs(filepath.Join(".", DirName))
@@ -131,7 +131,7 @@ llmConfig:
 	// Fields not set in local config keep the user config values.
 	assert.Equal(t, "anthropic", cfg.LlmConfig.Provider)
 	assert.Equal(t, []string{"claude-user", "claude-user-2"}, cfg.LlmConfig.Models)
-	assert.Equal(t, models.ReasoningHigh, cfg.LlmConfig.Reasoning)
+	assert.Equal(t, types.ReasoningHigh, cfg.LlmConfig.Reasoning)
 
 	// Local .harnesser dir exists -> DataDir points at the local dir.
 	wantDataDir, err := filepath.Abs(filepath.Join(".", DirName))

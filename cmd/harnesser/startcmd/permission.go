@@ -6,9 +6,9 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/c00/harnesser/models"
-	"github.com/c00/harnesser/runner"
-	"github.com/c00/harnesser/tools"
+	"github.com/c00/harnesser/agent"
+	"github.com/c00/harnesser/toolcallbuilder"
+	"github.com/c00/harnesser/types"
 )
 
 type permissionRequest struct {
@@ -19,7 +19,7 @@ type permissionRequest struct {
 
 type permissionDecisionMsg struct {
 	toolCallID string
-	decision   models.ToolCallDecision
+	decision   types.ToolCallDecision
 }
 
 type permissionDecisionResultMsg struct {
@@ -34,14 +34,14 @@ type permissionModel struct {
 	width    int
 }
 
-func newPermissionModel(pending []runner.PendingToolcall, width int) (*permissionModel, error) {
+func newPermissionModel(pending []agent.PendingToolcall, width int) (*permissionModel, error) {
 	if len(pending) == 0 {
 		return nil, fmt.Errorf("permission response contains no pending tool calls")
 	}
 
 	requests := make([]permissionRequest, 0, len(pending))
 	for _, item := range pending {
-		builder, err := tools.NewToolCallBuilder(item.ToolCall, item.ToolDefinition)
+		builder, err := toolcallbuilder.NewToolCallBuilder(item.ToolCall, item.ToolDefinition)
 		if err != nil {
 			return nil, fmt.Errorf("cannot render tool call %q: %w", item.ToolCall.ToolCallID, err)
 		}
@@ -69,12 +69,12 @@ func (m *permissionModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	var decision models.ToolCallDecision
+	var decision types.ToolCallDecision
 	switch strings.ToLower(keyMsg.String()) {
 	case "y":
-		decision = models.ToolCallDecisionApprove
+		decision = types.ToolCallDecisionApprove
 	case "n":
-		decision = models.ToolCallDecisionReject
+		decision = types.ToolCallDecisionReject
 	default:
 		return m, nil
 	}
