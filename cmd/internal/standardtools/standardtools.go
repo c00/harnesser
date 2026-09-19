@@ -11,9 +11,8 @@ import (
 
 var standardTools = []types.ToolDefinition{
 	{
-		Enabled:    true,
-		Trusted:    true,
-		AllowedEnv: []string{"FIRECRAWL_API_KEY"},
+		Enabled: true,
+		Trusted: true,
 		Tool: types.Tool{
 			Name:        "firecrawl_scrape",
 			Description: "Scrape a url and return it as markdown. The url is required.",
@@ -21,23 +20,25 @@ var standardTools = []types.ToolDefinition{
 				"url": stringParameter("The url to scrape."),
 			}, "url"),
 		},
-		Command: []string{
-			"curl",
-			"-X",
-			"POST",
-			"https://api.firecrawl.dev/v1/scrape",
-			"-H",
-			"Content-Type: application/json",
-			"-H",
-			"Authorization: Bearer {{.Env.FIRECRAWL_API_KEY}}",
-			"-d",
-			`{ "url": {{ json .Params.url}}, "formats": ["markdown"] }`,
+		Command: &types.ToolCommand{
+			Command: []string{
+				"curl",
+				"-X",
+				"POST",
+				"https://api.firecrawl.dev/v1/scrape",
+				"-H",
+				"Content-Type: application/json",
+				"-H",
+				"Authorization: Bearer {{.Env.FIRECRAWL_API_KEY}}",
+				"-d",
+				`{ "url": {{ json .Params.url}}, "formats": ["markdown"] }`,
+			},
+			AllowedEnv: []string{"FIRECRAWL_API_KEY"},
 		},
 	},
 	{
-		Enabled:    true,
-		Trusted:    true,
-		AllowedEnv: []string{"FIRECRAWL_API_KEY"},
+		Enabled: true,
+		Trusted: true,
 		Tool: types.Tool{
 			Name:        "firecrawl_search",
 			Description: "Search the web. Query is required.",
@@ -45,17 +46,20 @@ var standardTools = []types.ToolDefinition{
 				"query": stringParameter("The search query to send to Firecrawl."),
 			}, "query"),
 		},
-		Command: []string{
-			"curl",
-			"-X",
-			"POST",
-			"https://api.firecrawl.dev/v1/search",
-			"-H",
-			"Content-Type: application/json",
-			"-H",
-			"Authorization: Bearer {{.Env.FIRECRAWL_API_KEY}}",
-			"-d",
-			`{ "query": {{ json .Params.query}} }`,
+		Command: &types.ToolCommand{
+			Command: []string{
+				"curl",
+				"-X",
+				"POST",
+				"https://api.firecrawl.dev/v1/search",
+				"-H",
+				"Content-Type: application/json",
+				"-H",
+				"Authorization: Bearer {{.Env.FIRECRAWL_API_KEY}}",
+				"-d",
+				`{ "query": {{ json .Params.query}} }`,
+			},
+			AllowedEnv: []string{"FIRECRAWL_API_KEY"},
 		},
 	},
 	{
@@ -66,7 +70,9 @@ var standardTools = []types.ToolDefinition{
 			Description: "Gets the current date and time. Useful for when the response needs to be time-aware.",
 			Parameters:  map[string]any{},
 		},
-		Command: []string{"date"},
+		Command: &types.ToolCommand{
+			Command: []string{"date"},
+		},
 	},
 	commandTool(
 		"git_diff",
@@ -131,15 +137,17 @@ var standardTools = []types.ToolDefinition{
 				"includeLineNumbers": defaultParameter("boolean", "If true, line numbers are included in the output.", false),
 			}, "filename"),
 		},
-		Command: []string{
-			`{{ with index .Env "HARNESSER_BIN"}}{{.}}{{else}}harnesser{{end}}`,
-			"tool",
-			"read-file",
-			"{{ .Params.filename }}",
-			`{{ with index .Params "startLine" }}--start={{ . }}{{ end }}`,
-			`{{ with index .Params "maxLines" }}--max-lines={{ . }}{{ end }}`,
-			`{{ with index .Params "maxBytes" }}--max-bytes={{ . }}{{ end }}`,
-			`{{ with index .Params "includeLineNumbers" }}--line-numbers{{ end }}`,
+		Command: &types.ToolCommand{
+			Command: []string{
+				`{{ with index .Env "HARNESSER_BIN"}}{{.}}{{else}}harnesser{{end}}`,
+				"tool",
+				"read-file",
+				"{{ .Params.filename }}",
+				`{{ with index .Params "startLine" }}--start={{ . }}{{ end }}`,
+				`{{ with index .Params "maxLines" }}--max-lines={{ . }}{{ end }}`,
+				`{{ with index .Params "maxBytes" }}--max-bytes={{ . }}{{ end }}`,
+				`{{ with index .Params "includeLineNumbers" }}--line-numbers{{ end }}`,
+			},
 		},
 	},
 	{
@@ -155,14 +163,16 @@ var standardTools = []types.ToolDefinition{
 				"expectedMatches": defaultParameter("number", "The number of matches required before the file is edited.", 1),
 			}, "filename", "search", "replacement"),
 		},
-		Command: []string{
-			`{{ with index .Env "HARNESSER_BIN"}}{{.}}{{else}}harnesser{{end}}`,
-			"tool",
-			"replace-text",
-			"{{ .Params.filename }}",
-			"{{ .Params.search }}",
-			"{{ .Params.replacement }}",
-			`{{ if ne (index .Params "expectedMatches") nil }}--expected-matches={{ index .Params "expectedMatches" }}{{ end }}`,
+		Command: &types.ToolCommand{
+			Command: []string{
+				`{{ with index .Env "HARNESSER_BIN"}}{{.}}{{else}}harnesser{{end}}`,
+				"tool",
+				"replace-text",
+				"{{ .Params.filename }}",
+				"{{ .Params.search }}",
+				"{{ .Params.replacement }}",
+				`{{ if ne (index .Params "expectedMatches") nil }}--expected-matches={{ index .Params "expectedMatches" }}{{ end }}`,
+			},
 		},
 	},
 	commandTool(
@@ -189,8 +199,10 @@ var standardTools = []types.ToolDefinition{
 				"command": stringParameter("The shell command to run."),
 			}, "command"),
 		},
-		Command:  []string{"sh", "-c", "{{ .Params.command }}"},
-		ArgsFrom: "args",
+		Command: &types.ToolCommand{
+			Command:  []string{"sh", "-c", "{{ .Params.command }}"},
+			ArgsFrom: "args",
+		},
 	},
 	{
 		Enabled: true,
@@ -204,13 +216,15 @@ var standardTools = []types.ToolDefinition{
 				"append":   defaultParameter("boolean", "If true, contents will be appended to the file.", false),
 			}, "filename", "contents"),
 		},
-		Command: []string{
-			`{{ with index .Env "HARNESSER_BIN"}}{{.}}{{else}}harnesser{{end}}`,
-			"tool",
-			"write-file",
-			"{{ .Params.filename }}",
-			"{{ .Params.contents }}",
-			`{{ with index .Params "append" }}--append{{ end }}`,
+		Command: &types.ToolCommand{
+			Command: []string{
+				`{{ with index .Env "HARNESSER_BIN"}}{{.}}{{else}}harnesser{{end}}`,
+				"tool",
+				"write-file",
+				"{{ .Params.filename }}",
+				"{{ .Params.contents }}",
+				`{{ with index .Params "append" }}--append{{ end }}`,
+			},
 		},
 	},
 }
@@ -256,8 +270,10 @@ func commandTool(name, description, argsDescription string, trusted bool, comman
 				},
 			}),
 		},
-		Command:  command,
-		ArgsFrom: "args",
+		Command: &types.ToolCommand{
+			Command:  command,
+			ArgsFrom: "args",
+		},
 	}
 }
 

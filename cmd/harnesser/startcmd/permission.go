@@ -41,7 +41,7 @@ func newPermissionModel(pending []agent.PendingToolcall, width int) (*permission
 
 	requests := make([]permissionRequest, 0, len(pending))
 	for _, item := range pending {
-		builder, err := toolcallbuilder.NewToolCallBuilder(item.ToolCall, item.ToolDefinition)
+		builder, err := toolcallbuilder.NewToolCallCmdBuilder(item.ToolCall, item.ToolDefinition)
 		if err != nil {
 			return nil, fmt.Errorf("cannot render tool call %q: %w", item.ToolCall.ToolCallID, err)
 		}

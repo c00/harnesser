@@ -29,7 +29,7 @@ func newTestRunner(t *testing.T) (*Agent, *mockllm.MockLLM) {
 		llm,
 		newMockPromptProvider(),
 		history.NewMemoryProvider(),
-		toolset.NewMemoryProvider(),
+		toolset.NewEmptyRegistry(),
 	)
 
 	return r, llm
@@ -46,13 +46,12 @@ func addTestTool(t *testing.T, r *Agent, name string, trusted bool, command []st
 			Name:        name,
 			Description: "test tool",
 		},
-		Command: command,
+		Command: &types.ToolCommand{
+			Command: command,
+		},
 	}
 
-	p, ok := r.toolsProvider.(*toolset.MemoryProvider)
-	assert.True(t, ok)
-
-	p.AddDefinition(def)
+	r.toolsRegistry.SetToolDefs(def)
 }
 
 func boolStr(b bool) string {
@@ -314,7 +313,7 @@ func TestRunStep(t *testing.T) {
 				})
 			},
 			wantType: ResponseTypeToolResults,
-			wantMsg:  "cannot run tool call 'fail': running tool 'fail' failed",
+			wantMsg:  "cannot run tool call 'fail'",
 		},
 		{
 			name: "assistant text message is done",
@@ -427,7 +426,7 @@ func TestRunTools(t *testing.T) {
 		msgs, err := r.RunTools(context.Background())
 		require.NoError(t, err)
 		require.Len(t, msgs, 1)
-		assert.Equal(t, "user rejected the running of this tool call", msgs[0].Content.String())
+		assert.Contains(t, msgs[0].Content.String(), "rejected by user")
 	})
 
 }
@@ -446,20 +445,20 @@ func TestRunTool(t *testing.T) {
 
 		_, err := r.runTool(context.Background(), types.ToolCall{ToolCallID: "call_1", Function: "echo", Args: "{}", Decision: types.ToolCallDecisionNoDecision})
 		require.Error(t, err)
-		assert.ErrorIs(t, err, ErrNoDecision)
+		assert.ErrorIs(t, err, toolset.ErrNoDecision)
 	})
 
 	t.Run("untrusted rejected returns error message", func(t *testing.T) {
 		r, _ := newTestRunner(t)
 		addTestTool(t, r, "echo", false, []string{"echo", "hi"})
 
-		msg, err := r.runTool(context.Background(), types.ToolCall{
+		_, err := r.runTool(context.Background(), types.ToolCall{
 			ToolCallID: "call_1",
 			Function:   "echo",
 			Decision:   types.ToolCallDecisionReject,
 		})
-		require.NoError(t, err)
-		assert.Equal(t, "user rejected the running of this tool call", msg.Content.String())
+		require.Error(t, err)
+		assert.ErrorIs(t, err, toolset.ErrRejected)
 	})
 
 	t.Run("runs command and returns output", func(t *testing.T) {
@@ -494,12 +493,12 @@ func TestRunTool(t *testing.T) {
 					"required": []string{"name"},
 				},
 			},
-			Command: []string{"echo", "hello {{.Params.name}}"},
+			Command: &types.ToolCommand{
+				Command: []string{"echo", "hello {{.Params.name}}"},
+			},
 		}
 
-		p, ok := r.toolsProvider.(*toolset.MemoryProvider)
-		assert.True(t, ok)
-		p.AddDefinition(def)
+		r.toolsRegistry.SetToolDefs(def)
 
 		msg, err := r.runTool(context.Background(), types.ToolCall{
 			ToolCallID: "call_1",
@@ -527,12 +526,12 @@ func TestRunTool(t *testing.T) {
 					"required": []string{"name"},
 				},
 			},
-			Command: []string{"echo", "hello {{.Params.name}}"},
+			Command: &types.ToolCommand{
+				Command: []string{"echo", "hello {{.Params.name}}"},
+			},
 		}
 
-		p, ok := r.toolsProvider.(*toolset.MemoryProvider)
-		assert.True(t, ok)
-		p.AddDefinition(def)
+		r.toolsRegistry.SetToolDefs(def)
 
 		_, err := r.runTool(context.Background(), types.ToolCall{
 			ToolCallID: "call_1",

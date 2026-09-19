@@ -48,7 +48,7 @@ func run(cmd *cobra.Command, args []string) error {
 	if len(resp.ToApprove) > 0 {
 		fmt.Println("The following tools need approval:")
 		for _, pending := range resp.ToApprove {
-			builder, err := toolcallbuilder.NewToolCallBuilder(pending.ToolCall, pending.ToolDefinition)
+			builder, err := toolcallbuilder.NewToolCallCmdBuilder(pending.ToolCall, pending.ToolDefinition)
 			if err != nil {
 				return fmt.Errorf("cannot create new tool call builder: %w", err)
 			}

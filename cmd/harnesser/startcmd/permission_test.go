@@ -25,8 +25,10 @@ func TestPermissionModelDecision(t *testing.T) {
 			model, err := newPermissionModel([]agent.PendingToolcall{{
 				ToolCall: types.ToolCall{ToolCallID: "call_1", Function: "echo", Args: `{}`},
 				ToolDefinition: types.ToolDefinition{
-					Tool:    types.Tool{Name: "echo"},
-					Command: []string{"echo"},
+					Tool: types.Tool{Name: "echo"},
+					Command: &types.ToolCommand{
+						Command: []string{"echo"},
+					},
 				},
 			}}, 80)
 			require.NoError(t, err)

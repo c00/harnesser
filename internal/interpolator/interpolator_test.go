@@ -31,8 +31,10 @@ func TestInterpolatedCommand(t *testing.T) {
 			name: "simple string interpolation",
 			tc:   types.ToolCall{Args: `{"path": "/tmp/foo.txt"}`},
 			td: types.ToolDefinition{
-				Tool:    types.Tool{Parameters: validSchema},
-				Command: []string{"cat", "{{.Params.path}}"},
+				Tool: types.Tool{Parameters: validSchema},
+				Command: &types.ToolCommand{
+					Command: []string{"cat", "{{.Params.path}}"},
+				},
 			},
 			want: []string{"cat", "/tmp/foo.txt"},
 		},
@@ -40,8 +42,10 @@ func TestInterpolatedCommand(t *testing.T) {
 			name: "multiple params of different types",
 			tc:   types.ToolCall{Args: `{"path": "log.txt", "count": 3}`},
 			td: types.ToolDefinition{
-				Tool:    types.Tool{Parameters: validSchema},
-				Command: []string{"tail", "-n", "{{.Params.count}}", "{{.Params.path}}"},
+				Tool: types.Tool{Parameters: validSchema},
+				Command: &types.ToolCommand{
+					Command: []string{"tail", "-n", "{{.Params.count}}", "{{.Params.path}}"},
+				},
 			},
 			want: []string{"tail", "-n", "3", "log.txt"},
 		},
@@ -49,8 +53,10 @@ func TestInterpolatedCommand(t *testing.T) {
 			name: "no params used",
 			tc:   types.ToolCall{Args: `{}`},
 			td: types.ToolDefinition{
-				Tool:    types.Tool{Parameters: validSchema},
-				Command: []string{"echo", "hello"},
+				Tool: types.Tool{Parameters: validSchema},
+				Command: &types.ToolCommand{
+					Command: []string{"echo", "hello"},
+				},
 			},
 			want: []string{"echo", "hello"},
 		},
@@ -58,8 +64,10 @@ func TestInterpolatedCommand(t *testing.T) {
 			name: "json function marshals object",
 			tc:   types.ToolCall{Args: `{"payload": {"a": 1, "b": "two"}}`},
 			td: types.ToolDefinition{
-				Tool:    types.Tool{Parameters: validSchema},
-				Command: []string{`{{json .Params.payload}}`},
+				Tool: types.Tool{Parameters: validSchema},
+				Command: &types.ToolCommand{
+					Command: []string{`{{json .Params.payload}}`},
+				},
 			},
 			want: []string{`{"a":1,"b":"two"}`},
 		},
@@ -67,9 +75,11 @@ func TestInterpolatedCommand(t *testing.T) {
 			name: "allowed env vars are interpolated",
 			tc:   types.ToolCall{Args: `{}`},
 			td: types.ToolDefinition{
-				Tool:       types.Tool{Parameters: validSchema},
-				Command:    []string{"deploy", "{{.Env.HOME_DIR}}"},
-				AllowedEnv: []string{"HOME_DIR"},
+				Tool: types.Tool{Parameters: validSchema},
+				Command: &types.ToolCommand{
+					Command:    []string{"deploy", "{{.Env.HOME_DIR}}"},
+					AllowedEnv: []string{"HOME_DIR"},
+				},
 			},
 			env:  map[string]string{"HOME_DIR": "/home/coo"},
 			want: []string{"deploy", "/home/coo"},
@@ -78,9 +88,11 @@ func TestInterpolatedCommand(t *testing.T) {
 			name: "missing allowed env var errors",
 			tc:   types.ToolCall{Args: `{}`},
 			td: types.ToolDefinition{
-				Tool:       types.Tool{Parameters: validSchema},
-				Command:    []string{"deploy", "{{.Env.HOME_DIR}}"},
-				AllowedEnv: []string{"HOME_DIR"},
+				Tool: types.Tool{Parameters: validSchema},
+				Command: &types.ToolCommand{
+					Command:    []string{"deploy", "{{.Env.HOME_DIR}}"},
+					AllowedEnv: []string{"HOME_DIR"},
+				},
 			},
 			wantErr: true,
 			errMsg:  "missing env variable: HOME_DIR",
@@ -89,8 +101,10 @@ func TestInterpolatedCommand(t *testing.T) {
 			name: "nil schema treated as empty schema",
 			tc:   types.ToolCall{Args: `{"path": "/tmp/foo.txt"}`},
 			td: types.ToolDefinition{
-				Tool:    types.Tool{Parameters: nil},
-				Command: []string{"cat", "{{.Params.path}}"},
+				Tool: types.Tool{Parameters: nil},
+				Command: &types.ToolCommand{
+					Command: []string{"cat", "{{.Params.path}}"},
+				},
 			},
 			want: []string{"cat", "/tmp/foo.txt"},
 		},
@@ -106,7 +120,9 @@ func TestInterpolatedCommand(t *testing.T) {
 						},
 					},
 				},
-				Command: []string{"echo", "{{.Params.count}}"},
+				Command: &types.ToolCommand{
+					Command: []string{"echo", "{{.Params.count}}"},
+				},
 			},
 			wantErr: true,
 			errMsg:  "tool call parameters not valid",
@@ -115,7 +131,9 @@ func TestInterpolatedCommand(t *testing.T) {
 			name: "invalid json args errors",
 			tc:   types.ToolCall{Args: `{invalid`},
 			td: types.ToolDefinition{
-				Command: []string{"echo"},
+				Command: &types.ToolCommand{
+					Command: []string{"echo"},
+				},
 			},
 			wantErr: true,
 			errMsg:  "cannot get toolcall args as parameters",
@@ -124,8 +142,10 @@ func TestInterpolatedCommand(t *testing.T) {
 			name: "missing param with missingkey=error errors",
 			tc:   types.ToolCall{Args: `{}`},
 			td: types.ToolDefinition{
-				Tool:    types.Tool{Parameters: validSchema},
-				Command: []string{"cat", "{{.Params.path}}"},
+				Tool: types.Tool{Parameters: validSchema},
+				Command: &types.ToolCommand{
+					Command: []string{"cat", "{{.Params.path}}"},
+				},
 			},
 			wantErr: true,
 			errMsg:  "cannot execute template for part {{.Params.path}}",
@@ -134,8 +154,10 @@ func TestInterpolatedCommand(t *testing.T) {
 			name: "invalid template syntax errors",
 			tc:   types.ToolCall{Args: `{}`},
 			td: types.ToolDefinition{
-				Tool:    types.Tool{Parameters: validSchema},
-				Command: []string{"echo", "{{.Params.path"},
+				Tool: types.Tool{Parameters: validSchema},
+				Command: &types.ToolCommand{
+					Command: []string{"echo", "{{.Params.path"},
+				},
 			},
 			wantErr: true,
 			errMsg:  "cannot parse template",

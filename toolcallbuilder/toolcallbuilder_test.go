@@ -22,7 +22,9 @@ func TestNewToolCallBuilder(t *testing.T) {
 			name:     "builds interpolated command",
 			toolCall: types.ToolCall{Args: `{"path":"notes.txt"}`},
 			definition: types.ToolDefinition{
-				Command: []string{"cat", "{{.Params.path}}"},
+				Command: &types.ToolCommand{
+					Command: []string{"cat", "{{.Params.path}}"},
+				},
 			},
 			wantName:    "cat",
 			wantArgs:    []string{"notes.txt"},
@@ -32,8 +34,10 @@ func TestNewToolCallBuilder(t *testing.T) {
 			name:     "appends args from parameter and removes empty args",
 			toolCall: types.ToolCall{Args: `{"files":["one.txt","","two.txt"]}`},
 			definition: types.ToolDefinition{
-				Command:  []string{"open", "", "--read-only"},
-				ArgsFrom: "files",
+				Command: &types.ToolCommand{
+					Command:  []string{"open", "", "--read-only"},
+					ArgsFrom: "files",
+				},
 			},
 			wantName:    "open",
 			wantArgs:    []string{"--read-only", "one.txt", "two.txt"},
@@ -49,7 +53,9 @@ func TestNewToolCallBuilder(t *testing.T) {
 			name:     "wraps interpolation error",
 			toolCall: types.ToolCall{Args: `{}`},
 			definition: types.ToolDefinition{
-				Command: []string{"echo", "{{.Params.missing}}"},
+				Command: &types.ToolCommand{
+					Command: []string{"echo", "{{.Params.missing}}"},
+				},
 			},
 			wantErr: "cannot interpolate command: cannot execute template",
 		},
@@ -57,7 +63,7 @@ func TestNewToolCallBuilder(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			builder, err := NewToolCallBuilder(tt.toolCall, tt.definition)
+			builder, err := NewToolCallCmdBuilder(tt.toolCall, tt.definition)
 			if tt.wantErr != "" {
 				require.Error(t, err)
 				assert.ErrorContains(t, err, tt.wantErr)
@@ -74,11 +80,13 @@ func TestNewToolCallBuilder(t *testing.T) {
 }
 
 func TestToolCallBuilderCommandArgsReturnsCopy(t *testing.T) {
-	builder, err := NewToolCallBuilder(
+	builder, err := NewToolCallCmdBuilder(
 		types.ToolCall{Args: `{"files":["one.txt"]}`},
 		types.ToolDefinition{
-			Command:  []string{"open", "--read-only"},
-			ArgsFrom: "files",
+			Command: &types.ToolCommand{
+				Command:  []string{"open", "--read-only"},
+				ArgsFrom: "files",
+			},
 		},
 	)
 	require.NoError(t, err)
@@ -92,7 +100,7 @@ func TestToolCallBuilderCommandArgsReturnsCopy(t *testing.T) {
 func TestToolCallBuilderBuild(t *testing.T) {
 	tests := []struct {
 		name      string
-		builder   ToolCallBuilder
+		builder   ToolCallCmdBuilder
 		wantName  string
 		wantArgs  []string
 		wantExtra []string
@@ -100,10 +108,12 @@ func TestToolCallBuilderBuild(t *testing.T) {
 	}{
 		{
 			name: "builds command fields",
-			builder: ToolCallBuilder{
+			builder: ToolCallCmdBuilder{
 				toolCall: types.ToolCall{Args: `{"value":"hello"}`},
 				toolCallDef: types.ToolDefinition{
-					Command: []string{"echo", "{{.Params.value}}"},
+					Command: &types.ToolCommand{
+						Command: []string{"echo", "{{.Params.value}}"},
+					},
 				},
 			},
 			wantName:  "echo",
@@ -112,7 +122,7 @@ func TestToolCallBuilderBuild(t *testing.T) {
 		},
 		{
 			name: "does not rebuild initialized fields",
-			builder: ToolCallBuilder{
+			builder: ToolCallCmdBuilder{
 				toolCall:         types.ToolCall{Args: `{invalid`},
 				toolCallDef:      types.ToolDefinition{},
 				commandName:      "existing",
@@ -125,10 +135,12 @@ func TestToolCallBuilderBuild(t *testing.T) {
 		},
 		{
 			name: "returns interpolation errors",
-			builder: ToolCallBuilder{
+			builder: ToolCallCmdBuilder{
 				toolCall: types.ToolCall{Args: `{invalid`},
 				toolCallDef: types.ToolDefinition{
-					Command: []string{"echo"},
+					Command: &types.ToolCommand{
+						Command: []string{"echo"},
+					},
 				},
 			},
 			wantErr: "cannot interpolate command: cannot get toolcall args as parameters",

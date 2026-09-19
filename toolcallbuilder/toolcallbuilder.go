@@ -10,8 +10,8 @@ import (
 	"github.com/c00/harnesser/types"
 )
 
-// ToolCallBuilder uses the definition and toolcall to create the command and its arguments.
-type ToolCallBuilder struct {
+// ToolCallCmdBuilder uses the definition and toolcall to create the command and its arguments.
+type ToolCallCmdBuilder struct {
 	toolCallDef types.ToolDefinition
 	toolCall    types.ToolCall
 
@@ -20,8 +20,12 @@ type ToolCallBuilder struct {
 	extraArgs        []string
 }
 
-func NewToolCallBuilder(tc types.ToolCall, td types.ToolDefinition) (*ToolCallBuilder, error) {
-	b := &ToolCallBuilder{
+func NewToolCallCmdBuilder(tc types.ToolCall, td types.ToolDefinition) (*ToolCallCmdBuilder, error) {
+	if td.Command == nil {
+		return nil, errors.New("tool call does not have a command")
+	}
+
+	b := &ToolCallCmdBuilder{
 		toolCallDef: td,
 		toolCall:    tc,
 	}
@@ -33,28 +37,28 @@ func NewToolCallBuilder(tc types.ToolCall, td types.ToolDefinition) (*ToolCallBu
 }
 
 // Return the command as a string. For logging and validation purposes.
-func (b *ToolCallBuilder) CommandString() string {
+func (b *ToolCallCmdBuilder) CommandString() string {
 	return fmt.Sprintf("%v %v %v", b.commandName, strings.Join(b.interpolatedArgs, " "), strings.Join(b.extraArgs, " "))
 }
 
-func (b *ToolCallBuilder) CommandName() string {
+func (b *ToolCallCmdBuilder) CommandName() string {
 	return b.commandName
 }
 
-func (b *ToolCallBuilder) CommandArgs() []string {
+func (b *ToolCallCmdBuilder) CommandArgs() []string {
 	allArgs := append([]string{}, b.interpolatedArgs...)
 	allArgs = append(allArgs, b.extraArgs...)
 
 	return allArgs
 }
 
-func (b *ToolCallBuilder) build() error {
+func (b *ToolCallCmdBuilder) build() error {
 	if b.extraArgs != nil && b.interpolatedArgs != nil {
 		// Already built.
 		return nil
 	}
 
-	if len(b.toolCallDef.Command) == 0 {
+	if len(b.toolCallDef.Command.Command) == 0 {
 		return errors.New("tool call does not have a command")
 	}
 
@@ -70,8 +74,8 @@ func (b *ToolCallBuilder) build() error {
 	b.commandName = args[0]
 	b.interpolatedArgs = args[1:]
 
-	if b.toolCallDef.ArgsFrom != "" {
-		extraArgs := getStringSlice(data.Params, b.toolCallDef.ArgsFrom)
+	if b.toolCallDef.Command.ArgsFrom != "" {
+		extraArgs := getStringSlice(data.Params, b.toolCallDef.Command.ArgsFrom)
 		extraArgs = slices.DeleteFunc(extraArgs, func(s string) bool {
 			return s == ""
 		})

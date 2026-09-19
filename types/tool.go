@@ -1,6 +1,7 @@
 package types
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 )
@@ -20,6 +21,16 @@ type ToolDefinition struct {
 	// Trusted: true will automatically run the command if it invoked. If false, will ask the user for confirmation
 	Trusted bool `yaml:"trusted"`
 	Tool    Tool `yaml:"tool"`
+	// Command has the data needed to exec the tool. Either Command or Callback needs to be set.
+	Command *ToolCommand `yaml:"command,omitempty"`
+	// Callback is ran to exec the tool. Either Command or Callback needs to be set.
+	// Callbacks cannot be serialized to yaml. This option is only available for direct use.
+	Callback ToolCallback `yaml:"-"`
+}
+
+type ToolCallback func(ctx context.Context, params map[string]any) (string, error)
+
+type ToolCommand struct {
 	// Command specifies the command and arguments
 	Command []string `yaml:"command"`
 	// ArgsFrom specified the parameter where the args are set. Should point to a string array

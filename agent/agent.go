@@ -5,9 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os/exec"
 	"strings"
-	"time"
 
 	"github.com/c00/harnesser/history"
 	"github.com/c00/harnesser/llm"
@@ -49,17 +47,17 @@ type Agent struct {
 	llm             llm.LlmProvider
 	promptsProvider systemprompts.PromptsReader
 	histProv        history.HistoryProvider
-	toolsProvider   toolset.ToolsProvider
+	toolsRegistry   *toolset.ToolRegistry
 
 	messages types.Messages
 }
 
-func NewAgent(llm llm.LlmProvider, promptsProvider systemprompts.PromptsReader, histProv history.HistoryProvider, toolsProvider toolset.ToolsProvider) *Agent {
+func NewAgent(llm llm.LlmProvider, promptsProvider systemprompts.PromptsReader, histProv history.HistoryProvider, tools *toolset.ToolRegistry) *Agent {
 	runner := Agent{
 		llm:             llm,
 		promptsProvider: promptsProvider,
 		histProv:        histProv,
-		toolsProvider:   toolsProvider,
+		toolsRegistry:   tools,
 		messages:        types.Messages{},
 	}
 
@@ -138,12 +136,12 @@ func (r *Agent) runInference(ctx context.Context, cb llm.StreamDeltaFunc) (types
 	var resp types.Message
 
 	if shouldStream {
-		resp, err = streamingProvider.GenerateStream(ctx, allMsgs, r.toolsProvider.GetTools(), cb)
+		resp, err = streamingProvider.GenerateStream(ctx, allMsgs, r.toolsRegistry.GetTools(), cb)
 		if err != nil {
 			return types.Message{}, fmt.Errorf("cannot generate llm response: %w", err)
 		}
 	} else {
-		resp, err = r.llm.Generate(ctx, allMsgs, r.toolsProvider.GetTools())
+		resp, err = r.llm.Generate(ctx, allMsgs, r.toolsRegistry.GetTools())
 		if err != nil {
 			return types.Message{}, fmt.Errorf("cannot generate llm response: %w", err)
 		}
@@ -206,7 +204,7 @@ func (r *Agent) runStep(ctx context.Context, cb llm.StreamDeltaFunc) (Response, 
 		notApprovedYet := []PendingToolcall{}
 
 		for _, tc := range lastMsg.ToolCalls {
-			td, err := r.toolsProvider.GetDefinition(tc.Function)
+			td, err := r.toolsRegistry.GetToolDef(tc.Function)
 			if err != nil {
 				slog.Warn("cannot get tool definition, skipping", "error", err.Error(), "function", tc.Function)
 				continue
@@ -283,54 +281,12 @@ func (r *Agent) RunTools(ctx context.Context) (types.Messages, error) {
 }
 
 func (r *Agent) runTool(ctx context.Context, tc types.ToolCall) (types.Message, error) {
-	// Find the tool
-	td, err := r.toolsProvider.GetDefinition(tc.Function)
+	result, err := r.toolsRegistry.Run(ctx, tc)
 	if err != nil {
-		return types.Message{}, fmt.Errorf("cannot get tool def for %q: %w", tc.Function, err)
+		return types.Message{}, fmt.Errorf("cannot run tool %v: %w", tc.Function, err)
 	}
 
-	// Can we run this tool?
-	if !td.Trusted {
-		switch tc.Decision {
-		case "":
-			return types.Message{}, fmt.Errorf("tool %v, function %v: %w", tc.ToolCallID, tc.Function, ErrNoDecision)
-		case types.ToolCallDecisionNoDecision:
-			return types.Message{}, fmt.Errorf("tool %v, function %v: %w", tc.ToolCallID, tc.Function, ErrNoDecision)
-		case types.ToolCallDecisionReject:
-			return types.NewToolErrorMessage(tc.ToolCallID, "user rejected the running of this tool call"), nil
-		}
-	}
-
-	// build context
-	// Give it a cancelable context, with a timeout of 5 seconds
-	execCtx, cancel := context.WithTimeout(ctx, time.Second*5)
-	defer cancel()
-
-	builder, err := toolcallbuilder.NewToolCallBuilder(tc, td)
-	if err != nil {
-		return types.Message{}, fmt.Errorf("cannot create tool call builder: %w", err)
-	}
-
-	// TODO limit env vars
-	cmd := exec.CommandContext(execCtx, builder.CommandName(), builder.CommandArgs()...)
-
-	slog.Debug("Executing command", "command", fmt.Sprintf("%v", builder.CommandString()))
-
-	var stderr strings.Builder
-	cmd.Stderr = &stderr
-
-	data, err := cmd.Output()
-	if err != nil {
-		// If the process finishes with a non-zero exit code, return an error
-		stderrText := strings.TrimSpace(stderr.String())
-		if stderrText != "" {
-			return types.Message{}, fmt.Errorf("running tool '%v' failed: %w: %s", td.Tool.Name, err, stderrText)
-		}
-
-		return types.Message{}, fmt.Errorf("running tool '%v' failed: %w", td.Tool.Name, err)
-	}
-
-	return types.NewToolResultMessage(tc.ToolCallID, string(data)), nil
+	return types.NewToolResultMessage(tc.ToolCallID, result), nil
 }
 
 // AddMessage Adds a message to the loaded history. Does not trigger inference.
@@ -348,12 +304,12 @@ func (r *Agent) Messages() types.Messages {
 
 // ToolCallCommand returns the command that will be executed for a tool call.
 func (r *Agent) ToolCallCommand(tc types.ToolCall) (string, error) {
-	td, err := r.toolsProvider.GetDefinition(tc.Function)
+	td, err := r.toolsRegistry.GetToolDef(tc.Function)
 	if err != nil {
 		return "", fmt.Errorf("cannot get tool def for %q: %w", tc.Function, err)
 	}
 
-	builder, err := toolcallbuilder.NewToolCallBuilder(tc, td)
+	builder, err := toolcallbuilder.NewToolCallCmdBuilder(tc, td)
 	if err != nil {
 		return "", fmt.Errorf("cannot create tool call builder: %w", err)
 	}

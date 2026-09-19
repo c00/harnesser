@@ -32,7 +32,7 @@ func InterpolatedCommand(tc types.ToolCall, td types.ToolDefinition) ([]string, 
 		return nil, data, fmt.Errorf("cannot get toolcall args as parameters: %w", err)
 	}
 
-	for _, key := range td.AllowedEnv {
+	for _, key := range td.Command.AllowedEnv {
 		val := os.Getenv(key)
 		if val == "" {
 			return nil, data, fmt.Errorf("missing env variable: %v", key)
@@ -41,7 +41,7 @@ func InterpolatedCommand(tc types.ToolCall, td types.ToolDefinition) ([]string, 
 	}
 
 	// For each arg, interpolate with template/text
-	for _, part := range td.Command {
+	for _, part := range td.Command.Command {
 		tmpl, err := template.New("argument").
 			Option("missingkey=error").
 			Funcs(template.FuncMap{

@@ -68,7 +68,12 @@ func Setup(cmd *cobra.Command) (*agent.Agent, error) {
 		return nil, fmt.Errorf("cannot create prompts provider: %w", err)
 	}
 
-	tools, err := toolset.NewFileProvider(toolsDir)
+	toolLoader := toolset.NewFileLoader(toolsDir)
+	tools, err := toolset.NewRegistry(toolLoader)
+	if err != nil {
+		return nil, fmt.Errorf("cannot create tools registry: %w", err)
+	}
+
 	if err != nil {
 		return nil, fmt.Errorf("cannot create tools provider: %w", err)
 	}
