@@ -46,7 +46,7 @@ func Run(ctx context.Context, td types.ToolDefinition, tc types.ToolCall) (strin
 	// json marshall args to map[string]any
 	params := map[string]any{}
 	if tc.Args != "" {
-		err := json.Unmarshal([]byte(tc.Args), params)
+		err := json.Unmarshal([]byte(tc.Args), &params)
 		if err != nil {
 			return "", fmt.Errorf("cannot unmarshall params: %w", err)
 		}
