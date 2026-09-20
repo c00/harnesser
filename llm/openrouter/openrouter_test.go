@@ -35,36 +35,41 @@ func TestConvertMessages(t *testing.T) {
 			},
 		},
 		{
-			name: "attachment only becomes text placeholder",
+			name: "image attachment becomes data URL",
 			input: []types.Message{
 				{
 					Role: types.RoleUser,
 					Content: []types.MessagePart{
-						{Type: "image_url", Attachment: &types.Attachment{Filename: "receipt.png"}},
+						{Type: types.PartImage, Attachment: &types.Attachment{Filename: "receipt.png", MimeType: "image/png", Data: []byte("image")}},
 					},
 				},
 			},
 			want: []openrouterlib.ChatCompletionMessage{
 				{Role: "user", Content: openrouterlib.Content{Multi: []openrouterlib.ChatMessagePart{
-					{Type: openrouterlib.ChatMessagePartTypeText, Text: "[attachment: receipt.png]"},
+					{Type: openrouterlib.ChatMessagePartTypeImageURL, ImageURL: &openrouterlib.ChatMessageImageURL{URL: "data:image/png;base64,aW1hZ2U="}},
 				}}},
 			},
 		},
 		{
-			name: "text and attachment",
+			name: "text and image metadata",
 			input: []types.Message{
 				{
 					Role: types.RoleUser,
 					Content: []types.MessagePart{
 						{Type: "text", Text: "see attached"},
-						{Type: "image_url", Attachment: &types.Attachment{Filename: "invoice.jpg"}},
+						{Type: types.PartImage, Attachment: &types.Attachment{
+							Filename: "invoice.jpg", MimeType: "image/jpeg", Data: []byte("image"),
+							Title: "Invoice", Description: "April invoice",
+						}},
 					},
 				},
 			},
 			want: []openrouterlib.ChatCompletionMessage{
 				{Role: "user", Content: openrouterlib.Content{Multi: []openrouterlib.ChatMessagePart{
 					{Type: openrouterlib.ChatMessagePartTypeText, Text: "see attached"},
-					{Type: openrouterlib.ChatMessagePartTypeText, Text: "[attachment: invoice.jpg]"},
+					{Type: openrouterlib.ChatMessagePartTypeImageURL, ImageURL: &openrouterlib.ChatMessageImageURL{URL: "data:image/jpeg;base64,aW1hZ2U="}},
+					{Type: openrouterlib.ChatMessagePartTypeText, Text: "Title: Invoice"},
+					{Type: openrouterlib.ChatMessagePartTypeText, Text: "Description: April invoice"},
 				}}},
 			},
 		},
@@ -130,10 +135,44 @@ func TestConvertMessages(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := convertMessages(tt.input)
+			got, err := convertMessages(tt.input)
+			require.NoError(t, err)
 			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+func TestConvertMessagesReturnsAttachmentError(t *testing.T) {
+	t.Parallel()
+
+	_, err := convertMessages([]types.Message{{
+		Role: types.RoleUser,
+		Content: []types.MessagePart{{
+			Type: types.PartImage,
+			Attachment: &types.Attachment{Filename: t.TempDir() + "/missing.png"},
+		}},
+	}})
+
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "load image attachment")
+}
+
+func TestConvertMessagesRejectsNonImageAttachment(t *testing.T) {
+	t.Parallel()
+
+	_, err := convertMessages([]types.Message{{
+		Role: types.RoleUser,
+		Content: []types.MessagePart{{
+			Type: types.PartImage,
+			Attachment: &types.Attachment{
+				Filename: "notes.txt",
+				MimeType: "text/plain; charset=utf-8",
+				Data:     []byte("notes"),
+			},
+		}},
+	}})
+
+	require.EqualError(t, err, `attachment "notes.txt" has non-image MIME type "text/plain; charset=utf-8"`)
 }
 
 func TestGenerateDoesNotRetry(t *testing.T) {

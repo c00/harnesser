@@ -53,7 +53,7 @@ type ReasoningParts []ReasoningDetails
 type MessagePart struct {
 	Type         string      `json:"type"` // "text", "image_url", "audio"
 	Text         string      `json:"text,omitempty"`
-	Attachment   *Attachment `json:"attachment,omitempty"` // Reference to Attachment table
+	Attachment   *Attachment `json:"attachment,omitempty"` // Reference to Attachment
 	CacheControl CacheMode   `json:"-"`                    // In-memory only; not persisted
 }
 

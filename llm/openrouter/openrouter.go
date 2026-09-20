@@ -40,7 +40,7 @@ func (o *OpenRouter) Config() types.LlmConfig {
 	return o.config
 }
 
-func convertMessages(messages []types.Message) []openrouter.ChatCompletionMessage {
+func convertMessages(messages []types.Message) ([]openrouter.ChatCompletionMessage, error) {
 	orMessages := make([]openrouter.ChatCompletionMessage, len(messages))
 	for i, msg := range messages {
 		orMsg := openrouter.ChatCompletionMessage{
@@ -64,16 +64,44 @@ func convertMessages(messages []types.Message) []openrouter.ChatCompletionMessag
 					Text:         part.Text,
 					CacheControl: cc,
 				})
-			} else if part.Type == "image_url" && part.Attachment != nil {
-				slog.Debug("image url", "attachment", part.Attachment)
-				// Represent attachments as a text placeholder. We do not send
-				// image bytes to the LLM — they may contain sensitive financial
-				// data (payment screenshots) and would waste tokens
+			} else if part.Type == types.PartImage && part.Attachment != nil {
+				if len(part.Attachment.Data) == 0 || part.Attachment.MimeType == "" {
+					if err := part.Attachment.Load(); err != nil {
+						return nil, fmt.Errorf("load image attachment: %w", err)
+					}
+				}
+				if !part.Attachment.IsImage() {
+					return nil, fmt.Errorf("attachment %q has non-image MIME type %q", part.Attachment.Filename, part.Attachment.MimeType)
+				}
+
+				enc, err := part.Attachment.Base64()
+				if err != nil {
+					return nil, fmt.Errorf("encode image attachment %q: %w", part.Attachment.Filename, err)
+				}
 				parts = append(parts, openrouter.ChatMessagePart{
-					Type: openrouter.ChatMessagePartTypeText,
-					Text: fmt.Sprintf("[attachment: %s]", part.Attachment.Filename),
+					Type:         openrouter.ChatMessagePartTypeImageURL,
+					CacheControl: cc,
+					ImageURL: &openrouter.ChatMessageImageURL{
+						URL: enc,
+					},
 				})
+
+				if part.Attachment.Title != "" {
+					parts = append(parts, openrouter.ChatMessagePart{
+						Type:         openrouter.ChatMessagePartTypeText,
+						Text:         fmt.Sprintf("Title: %v", part.Attachment.Title),
+						CacheControl: cc,
+					})
+				}
+				if part.Attachment.Description != "" {
+					parts = append(parts, openrouter.ChatMessagePart{
+						Type:         openrouter.ChatMessagePartTypeText,
+						Text:         fmt.Sprintf("Description: %v", part.Attachment.Description),
+						CacheControl: cc,
+					})
+				}
 			}
+
 		}
 		orMsg.Content.Multi = parts
 
@@ -100,7 +128,7 @@ func convertMessages(messages []types.Message) []openrouter.ChatCompletionMessag
 
 		orMessages[i] = orMsg
 	}
-	return orMessages
+	return orMessages, nil
 }
 
 func convertTools(tools []types.Tool) []openrouter.Tool {
@@ -121,8 +149,11 @@ func convertTools(tools []types.Tool) []openrouter.Tool {
 	return orTools
 }
 
-func (o *OpenRouter) completionRequest(ctx context.Context, messages []types.Message, tools []types.Tool) openrouter.ChatCompletionRequest {
-	orMessages := convertMessages(messages)
+func (o *OpenRouter) completionRequest(ctx context.Context, messages []types.Message, tools []types.Tool) (openrouter.ChatCompletionRequest, error) {
+	orMessages, err := convertMessages(messages)
+	if err != nil {
+		return openrouter.ChatCompletionRequest{}, fmt.Errorf("cannot convert messages: %w", err)
+	}
 	if len(orMessages) > 0 {
 		last := &orMessages[len(orMessages)-1]
 		if len(last.Content.Multi) > 0 {
@@ -147,7 +178,7 @@ func (o *OpenRouter) completionRequest(ctx context.Context, messages []types.Mes
 		Reasoning: &openrouter.ChatCompletionReasoning{
 			Effort: reasoningEffort,
 		},
-	}
+	}, nil
 }
 
 func (o *OpenRouter) Generate(ctx context.Context, messages []types.Message, tools []types.Tool) (types.Message, error) {
@@ -155,9 +186,13 @@ func (o *OpenRouter) Generate(ctx context.Context, messages []types.Message, too
 
 	start := time.Now()
 	o.logger.DebugContext(ctx, "Generate", "messageCount", len(messages), "toolCount", len(tools))
+	request, err := o.completionRequest(ctx, messages, tools)
+	if err != nil {
+		return types.Message{}, fmt.Errorf("create chat completion request: %w", err)
+	}
 	resp, err := o.client.CreateChatCompletion(
 		ctx,
-		o.completionRequest(ctx, messages, tools),
+		request,
 	)
 
 	if err != nil {
@@ -247,7 +282,10 @@ func (o *OpenRouter) GenerateStream(ctx context.Context, messages []types.Messag
 		return types.Message{}, errors.New("stream callback is nil")
 	}
 
-	request := o.completionRequest(ctx, messages, tools)
+	request, err := o.completionRequest(ctx, messages, tools)
+	if err != nil {
+		return types.Message{}, fmt.Errorf("create chat completion request: %w", err)
+	}
 	request.Stream = true
 	request.StreamOptions = &openrouter.StreamOptions{IncludeUsage: true}
 
