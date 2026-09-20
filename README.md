@@ -65,7 +65,8 @@ command:
 
 ## TODO 
 
-- Add markdown parsing support
+- Deal with Attachments when storing conversations.
+- Add markdown parsing support for terminal
 - Add support for `allowedSecrets` and `{{ .Secrets.FOO }}` in interpolation.
 - Add support for `requiredSecrets`, so a tool will throw a hard error if it does not exist.
 - Make 'start' the default if no args are given
