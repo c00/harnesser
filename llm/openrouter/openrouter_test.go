@@ -148,13 +148,13 @@ func TestConvertMessagesReturnsAttachmentError(t *testing.T) {
 	_, err := convertMessages([]types.Message{{
 		Role: types.RoleUser,
 		Content: []types.MessagePart{{
-			Type: types.PartImage,
+			Type:       types.PartImage,
 			Attachment: &types.Attachment{Filename: t.TempDir() + "/missing.png"},
 		}},
 	}})
 
 	require.Error(t, err)
-	assert.ErrorContains(t, err, "load image attachment")
+	assert.ErrorContains(t, err, "image attachment")
 }
 
 func TestConvertMessagesRejectsNonImageAttachment(t *testing.T) {

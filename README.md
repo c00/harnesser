@@ -65,6 +65,9 @@ command:
 
 ## TODO 
 
+- History File provider save should separate file attachments.
+  - We should create a folder per conversation, rather than just a yaml file.
+  - So we get: 'key/convo.yaml' and 'key/file1.jpg', etc.
 - Deal with Attachments when storing conversations.
 - Add markdown parsing support for terminal
 - Add support for `allowedSecrets` and `{{ .Secrets.FOO }}` in interpolation.

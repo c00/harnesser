@@ -66,9 +66,7 @@ func convertMessages(messages []types.Message) ([]openrouter.ChatCompletionMessa
 				})
 			} else if part.Type == types.PartImage && part.Attachment != nil {
 				if len(part.Attachment.Data) == 0 || part.Attachment.MimeType == "" {
-					if err := part.Attachment.Load(); err != nil {
-						return nil, fmt.Errorf("load image attachment: %w", err)
-					}
+					return nil, fmt.Errorf("image attachment is empty or mimetype not set")
 				}
 				if !part.Attachment.IsImage() {
 					return nil, fmt.Errorf("attachment %q has non-image MIME type %q", part.Attachment.Filename, part.Attachment.MimeType)

@@ -24,7 +24,7 @@ type HistoryEntry struct {
 	Updated  time.Time
 }
 
-// Create a new key (filename) for a history entry. Defaults to a RFC3339 timestamp.
+// Create a new key for a history entry. Defaults to a RFC3339 timestamp.
 func NewKey() string {
-	return fmt.Sprintf("%v.yaml", time.Now().Format(time.RFC3339))
+	return fmt.Sprintf("%v", time.Now().Format(time.RFC3339))
 }
