@@ -42,7 +42,7 @@ func Setup(cmd *cobra.Command) (*agent.Agent, error) {
 	provider := openrouter.New(ctx, cfg.LlmConfig, apiKey)
 
 	// Initialize History
-	hist := history.NewFileProvider(historyDir)
+	hist := history.NewFileProvider2(historyDir)
 
 	historyFile, _ := cmd.Flags().GetString("thread")
 	cont, _ := cmd.Flags().GetBool("continue")
