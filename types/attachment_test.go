@@ -12,13 +12,26 @@ import (
 func TestAttachmentLoad(t *testing.T) {
 	t.Parallel()
 
-	filename := filepath.Join(t.TempDir(), "image.png")
+	dir := t.TempDir()
+	attachment := Attachment{ID: "attachment-id", MimeType: "image/png", OriginalFilename: "image.png"}
+	filename := filepath.Join(dir, attachment.Filename())
 	require.NoError(t, os.WriteFile(filename, []byte("\x89PNG\r\n\x1a\n"), 0o600))
-	attachment := Attachment{Filename: filename}
 
-	require.NoError(t, attachment.Load(""))
+	require.NoError(t, attachment.Load(dir))
 	assert.Equal(t, "image/png", attachment.MimeType)
 	assert.Equal(t, []byte("\x89PNG\r\n\x1a\n"), attachment.Data)
+}
+
+func TestAttachmentEnsureID(t *testing.T) {
+	t.Parallel()
+
+	attachment := Attachment{}
+	attachment.EnsureID()
+
+	require.NotEmpty(t, attachment.ID)
+	id := attachment.ID
+	attachment.EnsureID()
+	assert.Equal(t, id, attachment.ID)
 }
 
 func TestAttachmentSave(t *testing.T) {
@@ -27,41 +40,36 @@ func TestAttachmentSave(t *testing.T) {
 	t.Run("writes data and creates parent directories", func(t *testing.T) {
 		t.Parallel()
 
-		filename := filepath.Join(t.TempDir(), "nested", "directory", "image.png")
-		attachment := Attachment{Filename: filename, Data: []byte("image")}
+		dir := filepath.Join(t.TempDir(), "nested", "directory")
+		attachment := Attachment{ID: "attachment-id", MimeType: "image/png", OriginalFilename: "image.png", Data: []byte("image")}
 
-		require.NoError(t, attachment.Save(""))
+		require.NoError(t, attachment.Save(dir))
 
-		got, err := os.ReadFile(filename)
+		got, err := os.ReadFile(filepath.Join(dir, "attachment-id.png"))
 		require.NoError(t, err)
 		assert.Equal(t, attachment.Data, got)
 	})
 
 	tests := []struct {
 		name      string
-		setup     func(t *testing.T) Attachment
+		setup     func(t *testing.T) (Attachment, string)
 		wantError string
 	}{
 		{
-			name: "empty filename",
-			setup: func(t *testing.T) Attachment {
-				return Attachment{Data: []byte("image")}
-			},
-			wantError: "cannot save attachment: filename is empty",
-		},
-		{
 			name: "cannot create parent directory",
-			setup: func(t *testing.T) Attachment {
+			setup: func(t *testing.T) (Attachment, string) {
 				parent := filepath.Join(t.TempDir(), "parent")
 				require.NoError(t, os.WriteFile(parent, []byte("file"), 0o600))
-				return Attachment{Filename: filepath.Join(parent, "image.png"), Data: []byte("image")}
+				return Attachment{ID: "attachment-id", MimeType: "image/png", OriginalFilename: "image.png", Data: []byte("image")}, parent
 			},
 			wantError: "cannot create directory:",
 		},
 		{
 			name: "cannot write file",
-			setup: func(t *testing.T) Attachment {
-				return Attachment{Filename: t.TempDir(), Data: []byte("image")}
+			setup: func(t *testing.T) (Attachment, string) {
+				dir := t.TempDir()
+				require.NoError(t, os.Mkdir(filepath.Join(dir, "attachment-id.png"), 0o755))
+				return Attachment{ID: "attachment-id", MimeType: "image/png", OriginalFilename: "image.png", Data: []byte("image")}, dir
 			},
 			wantError: "cannot write file:",
 		},
@@ -71,8 +79,8 @@ func TestAttachmentSave(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			attachment := tt.setup(t)
-			err := attachment.Save("")
+			attachment, path := tt.setup(t)
+			err := attachment.Save(path)
 
 			require.Error(t, err)
 			assert.ErrorContains(t, err, tt.wantError)

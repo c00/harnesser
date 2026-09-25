@@ -69,12 +69,12 @@ func convertMessages(messages []types.Message) ([]openrouter.ChatCompletionMessa
 					return nil, fmt.Errorf("image attachment is empty or mimetype not set")
 				}
 				if !part.Attachment.IsImage() {
-					return nil, fmt.Errorf("attachment %q has non-image MIME type %q", part.Attachment.Filename, part.Attachment.MimeType)
+					return nil, fmt.Errorf("attachment %q has non-image MIME type %q", part.Attachment.ID, part.Attachment.MimeType)
 				}
 
 				enc, err := part.Attachment.Base64()
 				if err != nil {
-					return nil, fmt.Errorf("encode image attachment %q: %w", part.Attachment.Filename, err)
+					return nil, fmt.Errorf("encode image attachment %q: %w", part.Attachment.ID, err)
 				}
 				parts = append(parts, openrouter.ChatMessagePart{
 					Type:         openrouter.ChatMessagePartTypeImageURL,
@@ -83,6 +83,21 @@ func convertMessages(messages []types.Message) ([]openrouter.ChatCompletionMessa
 						URL: enc,
 					},
 				})
+
+				part.Attachment.EnsureID()
+				parts = append(parts, openrouter.ChatMessagePart{
+					Type:         openrouter.ChatMessagePartTypeText,
+					Text:         fmt.Sprintf("Filename: %v", part.Attachment.Filename()),
+					CacheControl: cc,
+				})
+
+				if part.Attachment.OriginalFilename != "" {
+					parts = append(parts, openrouter.ChatMessagePart{
+						Type:         openrouter.ChatMessagePartTypeText,
+						Text:         fmt.Sprintf("Original filename: %v", part.Attachment.OriginalFilename),
+						CacheControl: cc,
+					})
+				}
 
 				if part.Attachment.Title != "" {
 					parts = append(parts, openrouter.ChatMessagePart{

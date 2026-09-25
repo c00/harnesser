@@ -18,9 +18,9 @@ func TestFileProvider2SaveAttachment(t *testing.T) {
 	require.NoError(t, err)
 
 	attachment := &types.Attachment{
-		MimeType: "image/png",
-		Filename: filepath.Join("uploads", "image.png"),
-		Data:     []byte("\x89PNG\r\n\x1a\n"),
+		MimeType:         "image/png",
+		OriginalFilename: filepath.Join("uploads", "image.png"),
+		Data:             []byte("\x89PNG\r\n\x1a\n"),
 	}
 	entry := HistoryEntry{
 		Key: "chat",
@@ -36,11 +36,13 @@ func TestFileProvider2SaveAttachment(t *testing.T) {
 
 	require.NoError(t, provider.Save(entry))
 
-	assert.Equal(t, filepath.Join("uploads", "image.png"), attachment.Filename)
+	require.NotEmpty(t, attachment.ID)
+	attachmentID := attachment.ID
+	assert.Equal(t, filepath.Join("uploads", "image.png"), attachment.OriginalFilename)
 	assert.Equal(t, []byte("\x89PNG\r\n\x1a\n"), attachment.Data)
 	assert.Equal(t, entry, provider.Get())
 
-	savedData, err := os.ReadFile(filepath.Join(dir, "chat", attachmentFolder, "image.png"))
+	savedData, err := os.ReadFile(filepath.Join(dir, "chat", attachmentFolder, attachment.Filename()))
 	require.NoError(t, err)
 	assert.Equal(t, attachment.Data, savedData)
 
@@ -51,15 +53,20 @@ func TestFileProvider2SaveAttachment(t *testing.T) {
 	require.Len(t, stored, 1)
 	require.Len(t, stored[0].Content, 1)
 	require.NotNil(t, stored[0].Content[0].Attachment)
-	assert.Equal(t, "image.png", stored[0].Content[0].Attachment.Filename)
+	assert.Equal(t, attachmentID, stored[0].Content[0].Attachment.ID)
+	assert.Equal(t, filepath.Join("uploads", "image.png"), stored[0].Content[0].Attachment.OriginalFilename)
 	assert.Empty(t, stored[0].Content[0].Attachment.Data)
+
+	require.NoError(t, provider.Save(entry))
+	assert.Equal(t, attachmentID, attachment.ID)
 
 	loaded, err := provider.Select("chat")
 	require.NoError(t, err)
 	require.Len(t, loaded.Messages, 1)
 	require.Len(t, loaded.Messages[0].Content, 1)
 	require.NotNil(t, loaded.Messages[0].Content[0].Attachment)
-	assert.Equal(t, "image.png", loaded.Messages[0].Content[0].Attachment.Filename)
+	assert.Equal(t, attachmentID, loaded.Messages[0].Content[0].Attachment.ID)
+	assert.Equal(t, filepath.Join("uploads", "image.png"), loaded.Messages[0].Content[0].Attachment.OriginalFilename)
 	assert.Equal(t, attachment.Data, loaded.Messages[0].Content[0].Attachment.Data)
 }
 

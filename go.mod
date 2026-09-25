@@ -9,6 +9,7 @@ require (
 	github.com/charmbracelet/x/ansi v0.11.7
 	github.com/landlock-lsm/go-landlock v0.10.0
 	github.com/lastpersonlabs/goredact v0.1.0
+	github.com/matoous/go-nanoid/v2 v2.1.0
 	github.com/revrost/go-openrouter v1.8.0
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.12.1

@@ -126,11 +126,11 @@ func (p *FileProvider) Save(entry HistoryEntry) error {
 				continue
 			}
 
+			part.Attachment.EnsureID()
+
 			// Save the attachment as a separate file
 			attCopy := *part.Attachment
 			attachmentPath := filepath.Join(p.path, p.currentKey, attachmentFolder)
-			// Flatten the name
-			attCopy.Filename = filepath.Base(part.Attachment.Filename)
 
 			err := attCopy.Save(attachmentPath)
 			if err != nil {
