@@ -124,3 +124,23 @@ func selectAndSave(provider *MemoryProvider, entry HistoryEntry) error {
 
 	return provider.Save(entry)
 }
+
+func testMessages(user, assistant string) types.Messages {
+	createdAt := time.Date(2025, time.January, 1, 12, 0, 0, 0, time.UTC)
+	return types.Messages{
+		{
+			Role:      types.RoleUser,
+			Content:   types.MessageParts{{Type: types.PartText, Text: user}},
+			ToolCalls: []types.ToolCall{},
+			CreatedAt: createdAt,
+			Reasoning: types.ReasoningParts{},
+		},
+		{
+			Role:      types.RoleAssistant,
+			Content:   types.MessageParts{{Type: types.PartText, Text: assistant}},
+			ToolCalls: []types.ToolCall{},
+			CreatedAt: createdAt,
+			Reasoning: types.ReasoningParts{},
+		},
+	}
+}
