@@ -159,6 +159,15 @@ func (m ReasoningParts) String() string {
 	return res
 }
 
+func (ms Messages) FinishReason() FinishReason {
+	if len(ms) == 0 {
+		return FinishReasonStop
+	}
+
+	msg := ms[len(ms)-1]
+	return msg.FinishReason
+}
+
 func (ms Messages) String() string {
 	parts := make([]string, 0, len(ms))
 	for _, m := range ms {
