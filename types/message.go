@@ -168,6 +168,15 @@ func (ms Messages) FinishReason() FinishReason {
 	return msg.FinishReason
 }
 
+// Text returns just the text parts of the messages
+func (ms Messages) Text() string {
+	textParts := []string{}
+	for _, m := range ms {
+		textParts = append(textParts, m.Content.String())
+	}
+	return strings.TrimSpace(strings.Join(textParts, "\n"))
+}
+
 func (ms Messages) String() string {
 	parts := make([]string, 0, len(ms))
 	for _, m := range ms {
