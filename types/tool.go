@@ -9,7 +9,7 @@ import (
 const (
 	ToolCallDecisionApprove    ToolCallDecision = "approve"
 	ToolCallDecisionReject     ToolCallDecision = "reject"
-	ToolCallDecisionNoDecision ToolCallDecision = "no-decision"
+	ToolCallDecisionNoDecision ToolCallDecision = ""
 )
 
 type ToolCallDecision string

@@ -22,8 +22,7 @@ func Run(ctx context.Context, td types.ToolDefinition, tc types.ToolCall) (strin
 	// Can we run this tool?
 	if !td.Trusted {
 		switch tc.Decision {
-		case "":
-			return "", fmt.Errorf("tool %v, function %v: %w", tc.ToolCallID, tc.Function, ErrNoDecision)
+
 		case types.ToolCallDecisionNoDecision:
 			return "", fmt.Errorf("tool %v, function %v: %w", tc.ToolCallID, tc.Function, ErrNoDecision)
 		case types.ToolCallDecisionReject:

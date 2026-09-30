@@ -87,7 +87,7 @@ func convertMessages(messages []types.Message) ([]openrouter.ChatCompletionMessa
 				part.Attachment.EnsureID()
 				parts = append(parts, openrouter.ChatMessagePart{
 					Type:         openrouter.ChatMessagePartTypeText,
-					Text:         fmt.Sprintf("Filename: %v", part.Attachment.Filename()),
+					Text:         fmt.Sprintf("File ID: %v", part.Attachment.ID),
 					CacheControl: cc,
 				})
 

@@ -66,6 +66,10 @@ func NewAgent(llm llm.LlmProvider, promptsProvider systemprompts.PromptsReader, 
 	return &runner
 }
 
+func (r *Agent) GetHistoryEntry() history.HistoryEntry {
+	return r.histProv.Get()
+}
+
 // ConfirmToolCall lets the user approve or reject a tool call
 // Only works for the last message
 func (r *Agent) ConfirmToolCall(ctx context.Context, toolCallID string, decision types.ToolCallDecision) error {
@@ -210,7 +214,7 @@ func (r *Agent) runStep(ctx context.Context, cb llm.StreamDeltaFunc) (Response, 
 				continue
 			}
 
-			if !td.Trusted && (tc.Decision == types.ToolCallDecisionNoDecision || tc.Decision == "") {
+			if !td.Trusted && (tc.Decision == types.ToolCallDecisionNoDecision) {
 				notApprovedYet = append(notApprovedYet, PendingToolcall{ToolCall: tc, ToolDefinition: td})
 			}
 		}
