@@ -47,7 +47,7 @@ func TestConvertMessages(t *testing.T) {
 			want: []openrouterlib.ChatCompletionMessage{
 					{Role: "user", Content: openrouterlib.Content{Multi: []openrouterlib.ChatMessagePart{
 						{Type: openrouterlib.ChatMessagePartTypeImageURL, ImageURL: &openrouterlib.ChatMessageImageURL{URL: "data:image/png;base64,aW1hZ2U="}},
-						{Type: openrouterlib.ChatMessagePartTypeText, Text: "Filename: receipt-id.png"},
+						{Type: openrouterlib.ChatMessagePartTypeText, Text: "File ID: receipt-id"},
 						{Type: openrouterlib.ChatMessagePartTypeText, Text: "Original filename: receipt.png"},
 					}}},
 			},
@@ -70,7 +70,7 @@ func TestConvertMessages(t *testing.T) {
 				{Role: "user", Content: openrouterlib.Content{Multi: []openrouterlib.ChatMessagePart{
 						{Type: openrouterlib.ChatMessagePartTypeText, Text: "see attached"},
 						{Type: openrouterlib.ChatMessagePartTypeImageURL, ImageURL: &openrouterlib.ChatMessageImageURL{URL: "data:image/jpeg;base64,aW1hZ2U="}},
-						{Type: openrouterlib.ChatMessagePartTypeText, Text: "Filename: invoice-id.jpg"},
+						{Type: openrouterlib.ChatMessagePartTypeText, Text: "File ID: invoice-id"},
 						{Type: openrouterlib.ChatMessagePartTypeText, Text: "Original filename: invoice.jpg"},
 						{Type: openrouterlib.ChatMessagePartTypeText, Text: "Title: Invoice"},
 					{Type: openrouterlib.ChatMessagePartTypeText, Text: "Description: April invoice"},
