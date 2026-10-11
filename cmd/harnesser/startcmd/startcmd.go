@@ -22,6 +22,7 @@ var Cmd = &cobra.Command{
 func init() {
 	Cmd.Flags().StringP("thread", "t", "", "The history thread to load. Can be relative to the histdir, relative to the pwd or an absolute path")
 	Cmd.Flags().BoolP("continue", "c", false, "Continue the last conversation")
+	Cmd.Flags().BoolP("no-sandbox", "n", false, "Do not sandbox the process. It will have the same permissions as the user.")
 }
 
 func run(cmd *cobra.Command, args []string) error {
@@ -48,9 +49,14 @@ func run(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("cannot run program: %w", err)
 	}
-	if model, ok := finalModel.(tuiModel); ok && model.err != nil {
+
+	model, ok := finalModel.(tuiModel)
+	if ok && model.err != nil {
 		return model.err
 	}
+
+	fmt.Println(model.renderMessages())
+
 	return nil
 
 }

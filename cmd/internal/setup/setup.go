@@ -84,7 +84,9 @@ func Setup(cmd *cobra.Command) (*agent.Agent, error) {
 	}
 
 	// landlock
-	if cfg.Landlock.Active {
+	insecure, _ := cmd.Flags().GetBool("no-sandbox")
+
+	if cfg.Landlock.Active && !insecure {
 		slog.Debug("Activating LSM Landlock")
 
 		roDirs := []string{}
@@ -120,6 +122,8 @@ func Setup(cmd *cobra.Command) (*agent.Agent, error) {
 		if err != nil {
 			return nil, fmt.Errorf("cannot landlock: %w", err)
 		}
+	} else {
+		slog.Debug("Skipping LSM Landlock")
 	}
 
 	return agent, nil
